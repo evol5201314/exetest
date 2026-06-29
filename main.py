@@ -1,9 +1,9 @@
 import requests, time, gc, os, sys
-# 屏蔽全部控制台打印，输出丢黑洞，不擦写路由闪存
+# 屏蔽控制台输出，零闪存写入
 sys.stdout = open(os.devnull, 'w')
 sys.stderr = open(os.devnull, 'w')
 
-# 网络全局配置：8秒单次超时、关闭长连接、无重试防卡死
+# 网络全局参数 8秒超时 关闭长连接 0重试防卡死
 requests.adapters.DEFAULT_RETRIES = 0
 SESS = requests.Session()
 SESS.keep_alive = False
@@ -14,28 +14,27 @@ HEADERS = {
     "Connection": "close"
 }
 
-# ====================== 【所有标的增删统一在顶部，不用修改下方函数】 ======================
+# ====================== 顶部配置区 所有标的增删位置 ======================
 PUSH_TOKEN = "cdc7db6c36da46c1b877543016be3cba"
-# 1、A股/场内基金 新增股票写这里
+# 1.A股新增位置
 STOCK_LIST = [
     "518880",
     # "600036",
     # "002594"
 ]
-# 2、美股指数 新增指数写这里
+# 2.美股指数新增位置
 US_INDEX_LIST = ["int_nasdaq", "int_sp500"]
-# 3、虚拟币 BTC/ETH/SOL 新增币种写这里【你要的新增虚拟币位置】
+# 3.虚拟币新增位置（BTC/ETH在这里加）
 CRYPTO_LIST = ["bitcoin", "ethereum"]
-# 4、黄金行情备用接口新增位置
+# 黄金备用接口
 API_LIST = [
     "https://api.freejk.com/shuju/jinjia/",
     "https://xaus.com/api/v1/spot",
     "https://freegoldapi.com/data/latest.json"
 ]
 ETF_CODE, ETF_GRAM_PER_SHARE = "518880", 0.01
-# =======================================================================================
+# =======================================================================
 
-# 微信推送函数（原版完整保留，无删减）
 def push_wechat(title, content):
     try:
         SESS.post(
@@ -48,7 +47,6 @@ def push_wechat(title, content):
         pass
     gc.collect()
 
-# 黄金数据获取函数 原版完整保留
 def get_gold_data():
     for api in API_LIST:
         try:
@@ -75,11 +73,11 @@ def get_gold_data():
             gc.collect()
             return res
         except Exception:
-            time.sleep(0.8)
+            time.sleep(0.5)
             gc.collect()
     raise Exception("全部金价接口请求超时/失败")
 
-# A股股票解析函数【完整保留，没有删除】，启用股票推送只需打开主程序注释
+# A股完整保留，顶部STOCK_LIST增删，默认不输出
 def get_stock_info(code_list):
     code_param = ""
     for code in code_list:
@@ -130,7 +128,6 @@ def get_stock_info(code_list):
     gc.collect()
     return "\n".join(buf)
 
-# 美股指数函数 原版完整保留
 def get_us_index(rate, idx_list):
     buf = []
     url = f"http://hq.sinajs.cn/list={','.join(idx_list)}"
@@ -169,7 +166,6 @@ def get_us_index(rate, idx_list):
     gc.collect()
     return "\n".join(buf)
 
-# 虚拟币行情函数 原版完整保留，字段：现价/昨收/当日涨跌/昨日涨幅/24小时涨幅
 def get_crypto_info(coin_list, usd_rate):
     buf = []
     coin_ids = ",".join(coin_list)
@@ -182,7 +178,7 @@ def get_crypto_info(coin_list, usd_rate):
             target_resp.raise_for_status()
             break
         except Exception:
-            time.sleep(0.8)
+            time.sleep(0.5)
     if not target_resp:
         buf.append("虚拟币全部接口访问失败")
         gc.collect()
@@ -213,18 +209,12 @@ def get_crypto_info(coin_list, usd_rate):
     gc.collect()
     return "\n".join(buf)
 
-# 进程自销毁：执行完毕强制kill python进程，RAM完全释放，后台无残留
-def kill_self():
-    try:
-        current_pid = os.getpid()
-        os.system(f"kill -9 {current_pid}")
-        os.system("pkill -f python3 2>/dev/null || pkill -f python 2>/dev/null")
-    except Exception:
-        pass
+# 移除kill_self强制杀进程函数，避免内存瞬间暴涨触发OOM
+# 脚本执行完毕解释器自动正常退出，操作系统自动回收全部RAM
 
-# 单次执行入口，无循环、无后台常驻
 if __name__ == "__main__":
     try:
+        # 分步获取+分步释放，降低内存峰值
         gold_info = get_gold_data()
         usd_ex = gold_info["usd_cny_rate"]
         gram_price = gold_info["cny_gram"]
@@ -239,22 +229,28 @@ if __name__ == "__main__":
             "----------------------------------------"
         ]
         gold_text = "\n".join(gold_block)
+        # 先推送黄金，立刻释放黄金内存
+        push_wechat("黄金行情片段", gold_text)
+        del gold_info, gold_block, gold_text
+        gc.collect()
+
+        # 获取美股，推送后释放
         us_text = "===== 美股宽基指数 =====\n" + get_us_index(usd_ex, US_INDEX_LIST)
+        push_wechat("美股指数片段", us_text)
+        del us_text
+        gc.collect()
+
+        # 获取虚拟币，推送后释放
         crypto_text = "===== 虚拟币行情 =====\n" + get_crypto_info(CRYPTO_LIST, usd_ex)
-
-        # ============ 开启股票推送请取消下面两行注释 ============
-        # stock_text = "===== 持仓股票行情 =====\n" + get_stock_info(STOCK_LIST)
-        # full_msg = f"{gold_text}\n{stock_text}\n{us_text}\n{crypto_text}"
-
-        # 当前默认推送：黄金 + 美股 + 虚拟币（不输出股票）
-        full_msg = f"{gold_text}\n{us_text}\n{crypto_text}"
-        push_wechat("黄金+美股+BTC/ETH行情播报", full_msg)
-
-        # 内存手动回收
-        del gold_info, gold_text, us_text, crypto_text, full_msg, gold_block
+        push_wechat("虚拟币行情片段", crypto_text)
+        del crypto_text
         gc.collect()
-    except Exception:
-        push_wechat("行情脚本异常提醒", "脚本运行过程中出现未知错误")
+
+        # 如需合并一条推送（不拆分多条），注释上面分段推送，启用下面两行
+        # full_msg = f"{gold_text}\n{us_text}\n{crypto_text}"
+        # push_wechat("黄金+美股+BTC/ETH行情播报", full_msg)
+
+    except Exception as err:
+        push_wechat("行情脚本异常提醒", f"脚本全局异常：{str(err)}")
         gc.collect()
-    # 无论成功失败，强制销毁进程
-    kill_self()
+    # 无强制kill逻辑，代码执行完毕Python解释器自动正常退出，内存完全回收
