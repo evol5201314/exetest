@@ -12,7 +12,7 @@ API_LIST = [
 ]
 ETF_CODE = "518880"
 ETF_GRAM_PER_SHARE = 0.01
-# A股/场内基金列表，只保留黄金ETF，删除比亚迪、招行
+# A股/场内基金列表，只保留黄金ETF
 STOCK_CODES = "518880"
 # ==================================
 
@@ -76,7 +76,7 @@ def get_gold_data():
     raise Exception("所有金价接口均访问失败，请检查容器网络")
 
 def get_stock_info(code_str):
-    """A股/基金统一行情文本，新增昨日涨幅字段"""
+    """A股/基金统一行情文本，增加数组长度判断防止下标越界"""
     code_list = code_str.split()
     line_list = []
     code_param = ""
@@ -93,11 +93,14 @@ def get_stock_info(code_str):
         raw_text = res.text
         lines = raw_text.strip().split(";")
         for line in lines:
-            if not line:
+            if not line or '="' not in line:
                 continue
             data_part = line.split('"')[1]
             arr = data_part.split(",")
+            # 字段不足直接跳过，避免下标报错
             if len(arr) < 30:
+                line_list.append("数据字段缺失，读取失败")
+                line_list.append("-" * 30)
                 continue
             name = arr[0]
             now = float(arr[3])
@@ -108,7 +111,6 @@ def get_stock_info(code_str):
             last_day_change = round(last_close - yesterday_price, 2)
             last_day_pct = round((last_day_change / yesterday_price) * 100, 2)
             code = line.split("=")[0].split("_")[-1]
-            # 统一格式：增加昨日涨跌、昨日涨幅
             line_list.append(f"{code} {name}")
             line_list.append(f"当前价位：{now} 元")
             line_list.append(f"昨日收盘：{last_close} 元")
@@ -120,7 +122,7 @@ def get_stock_info(code_str):
     return "\n".join(line_list)
 
 def get_us_index(usd_rate):
-    """纳指、标普500，统一格式+换算人民币点位+昨日涨幅"""
+    """纳指、标普500，增加字段长度容错"""
     index_codes = ["int_nasdaq", "int_sp500"]
     url = f"http://hq.sinajs.cn/list={','.join(index_codes)}"
     headers = {"User-Agent": "Mozilla/5.0 Python Script", "Referer": "http://finance.sina.com.cn"}
@@ -129,9 +131,13 @@ def get_us_index(usd_rate):
         res = requests.get(url, headers=headers, timeout=TIMEOUT)
         raw = res.text.strip().split(";")
         for line in raw:
-            if not line:
+            if not line or '="' not in line:
                 continue
             data = line.split('"')[1].split(",")
+            if len(data) < 5:
+                line_list.append("指数数据字段不足，读取失败")
+                line_list.append("-" * 30)
+                continue
             idx_name = data[0]
             now = float(data[1])
             change = float(data[2])
@@ -158,7 +164,6 @@ if __name__ == "__main__":
         gram_price = gold_data["cny_gram"]
         etf_price = round(gram_price * ETF_GRAM_PER_SHARE, 2)
 
-        # 黄金板块统一格式
         gold_block = [
             "【黄金行情】",
             f"数据源：{gold_data['source']}",
@@ -170,10 +175,7 @@ if __name__ == "__main__":
         ]
         gold_text = "\n".join(gold_block)
 
-        # A股板块（仅保留518880）
         stock_text = "【A股/场内基金行情】\n" + get_stock_info(STOCK_CODES)
-
-        # 美股指数板块
         us_text = "【美股宽基指数行情】\n" + get_us_index(usd_cny_rate)
 
         full_msg = f"{gold_text}\n\n{stock_text}\n\n{us_text}"
