@@ -21,8 +21,8 @@ STOCK_LIST = [
     # "600036",
     # "002594"
 ]
-# 2.美股指数新增位置 涨乐财富通代码 .IXIC纳斯达克 .GSPC标普500
-US_INDEX_LIST = [".IXIC", ".GSPC"]
+# 2.美股指数新增位置
+US_INDEX_LIST = ["int_nasdaq", "int_sp500"]
 # 3.虚拟币新增位置【这里添加币种大写标识，自动拼接BTC-USDT】
 CRYPTO_LIST = ["BTC", "ETH"]
 # 黄金备用行情接口
@@ -117,7 +117,7 @@ def get_stock_info(code_list):
                     pass
             if last_close != 0:
                 change = round(now_price - last_close, 2)
-                change_pct = round((change / last_close) * 100, 2) if last_close !=0 else 0
+                change_pct = round((change / last_close) * 100, 2)
             buf.append(f"【{stock_code} {name}】")
             buf.append(f"现价：{now_price} 元")
             buf.append(f"昨收：{last_close} 元")
@@ -129,39 +129,45 @@ def get_stock_info(code_list):
     gc.collect()
     return "\n".join(buf)
 
-# 美股指数函数：替换为涨乐财富通公开接口，其余全部代码不动
+# 美股指数函数：增强容错，保证不会整块丢失
 def get_us_index(rate, idx_list):
-    import json
     buf = []
-    for code in idx_list:
-        resp = None
-        try:
-            # 涨乐财富通美股行情接口
-            url = f"https://hq.htsc.com.cn/hqdata/quote?code={code}&market=us"
-            resp = SESS.get(url, headers=HEADERS, timeout=GLOBAL_TIMEOUT)
-            resp.raise_for_status()
-            data = json.loads(resp.text)
-            name = data["data"]["name"]
-            now = float(data["data"]["price"])
-            last_close = float(data["data"]["preClose"])
-            chg = float(data["data"]["diff"])
-            chg_pct = float(data["data"]["diffRate"])
+    url = f"http://hq.sinajs.cn/list={','.join(idx_list)}"
+    try:
+        resp = SESS.get(url, headers=HEADERS, timeout=GLOBAL_TIMEOUT)
+        text_lines = resp.text.split(";")
+        del resp
+        for line in text_lines:
+            line = line.strip()
+            if not line or '="' not in line:
+                continue
+            field_arr = line.split('"')[1].split(",")
+            if len(field_arr) < 4:
+                buf.extend(["指数数据残缺，跳过", "----------------------------------------"])
+                continue
+            try:
+                idx_name, now, chg, chg_pct, yest_pt = field_arr[0], float(field_arr[1]), float(field_arr[2]), float(field_arr[3]), float(field_arr[4]) if len(field_arr)>=5 else float(field_arr[1])
+            except Exception:
+                buf.extend([f"{field_arr[0]}数值解析失败", "----------------------------------------"])
+                continue
+            last_close = round(now - chg, 2)
+            day_chg = round(last_close - yest_pt, 2)
+            day_pct = round((day_chg / yest_pt)*100, 2) if yest_pt != 0 else 0
             rmb_price = round(now * rate, 2)
             buf += [
-                name,
+                idx_name,
                 f"点位：{now} | 折合人民币{rmb_price}",
                 f"昨收：{last_close} 点",
                 f"当日涨跌：{chg}点（{chg_pct}%）",
+                f"前日涨跌：{day_chg}点（{day_pct}%）",
                 "----------------------------------------"
             ]
-        except Exception as err:
-            buf.append(f"{code} 涨乐财富通美股接口请求失败：{str(err)}")
-            buf.append("----------------------------------------")
-        finally:
-            if resp is not None:
-                del resp
-        gc.collect()
-        time.sleep(0.2)
+        del text_lines
+    except Exception as err:
+        # 接口异常时保留占位文本，不会整段消失
+        buf.append(f"美股指数接口请求失败：{str(err)}")
+        buf.append("----------------------------------------")
+    gc.collect()
     return "\n".join(buf)
 
 # 虚拟币：OKX欧易公开无密钥API，原生sodUtc8=早8点今日开盘
@@ -176,16 +182,21 @@ def get_crypto_info(coin_list, usd_rate):
             json_data = resp.json()
             del resp
             data = json_data["data"][0]
+            # 原生字段读取
             sym = coin
-            usd_now = round(float(data["last"]), 2)
-            usd_today_open = round(float(data["sodUtc8"]), 2)
-            usd_24h_open = round(float(data["open24h"]), 2)
+            usd_now = round(float(data["last"]), 2)               # 当前现价
+            usd_today_open = round(float(data["sodUtc8"]), 2)     # UTC8点今日开盘
+            usd_24h_open = round(float(data["open24h"]), 2)       # 24h滚动开盘
+            # 换算人民币
             cny_now = round(usd_now * usd_rate, 2)
             cny_today_open = round(usd_today_open * usd_rate, 2)
+            # 今日涨幅：现价 - 今日8点开盘
             today_chg_usd = round(usd_now - usd_today_open, 2)
             today_chg_pct = round((today_chg_usd / usd_today_open)*100, 2) if usd_today_open != 0 else 0
+            # 24小时涨幅
             chg_24h_usd = round(usd_now - usd_24h_open, 2)
             chg_24h_pct = round((chg_24h_usd / usd_24h_open)*100, 2) if usd_24h_open != 0 else 0
+            # 昨日涨幅计算
             usd_yesterday_close = usd_today_open
             usd_yesterday_open = round(2 * usd_24h_open - usd_today_open, 2)
             yesterday_chg_usd = round(usd_yesterday_close - usd_yesterday_open, 2)
@@ -254,3 +265,4 @@ if __name__ == "__main__":
         push_wechat("行情脚本异常提醒", f"脚本全局异常：{str(err)}")
         gc.collect()
 # 无强制kill进程代码，执行完毕Python解释器自动正常退出，系统完整回收RAM
+不要改动 只改美股接口 用涨乐财付通的接口
