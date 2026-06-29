@@ -1,10 +1,9 @@
 import requests
 import time
 
-# ========== 自定义配置区 ==========
+# ========== 配置区 ==========
 PUSH_TOKEN = "cdc7db6c36da46c1b877543016be3cba"
 TIMEOUT = 12
-# 黄金数据源
 API_LIST = [
     "https://api.freejk.com/shuju/jinjia/",
     "https://xaus.com/api/v1/spot",
@@ -12,177 +11,146 @@ API_LIST = [
 ]
 ETF_CODE = "518880"
 ETF_GRAM_PER_SHARE = 0.01
-# A股/场内基金列表，只保留黄金ETF
 STOCK_CODES = "518880"
-# ==================================
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 Linux Chrome/124.0 Safari/537.36",
+    "Referer": "http://finance.sina.com.cn"
+}
+# ===========================
 
 def push_wechat(title, content):
-    url = "http://www.pushplus.plus/send"
-    payload = {
-        "token": PUSH_TOKEN,
-        "title": title,
-        "content": content
-    }
     try:
-        requests.post(url, json=payload, timeout=10)
+        requests.post(
+            "http://www.pushplus.plus/send",
+            json={"token": PUSH_TOKEN, "title": title, "content": content},
+            timeout=10
+        )
     except Exception as e:
-        print("推送失败：", str(e))
+        print("推送失败:", e)
 
 def get_gold_data():
-    headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
-    }
     for api in API_LIST:
         try:
-            resp = requests.get(api, headers=headers, timeout=TIMEOUT)
-            resp.raise_for_status()
-            data = resp.json()
+            r = requests.get(api, headers=HEADERS, timeout=TIMEOUT)
+            r.raise_for_status()
+            d = r.json()
             if "freejk" in api:
-                usd_oz = round(data["data"]["international_price"], 2)
-                cny_gram = round(data["data"]["price"], 2)
-                usd_cny = round((data["data"]["price"] * 31.1035) / data["data"]["international_price"], 4)
-                return {
-                    "usd_oz": usd_oz,
-                    "cny_gram": cny_gram,
-                    "usd_cny_rate": usd_cny,
-                    "source": "freejk国内行情"
-                }
+                oz = round(d["data"]["international_price"], 2)
+                g = round(d["data"]["price"], 2)
+                rate = round((g * 31.1035) / oz, 4)
+                return {"usd_oz":oz, "cny_gram":g, "usd_cny_rate":rate, "source":"freejk国内行情"}
             elif "xaus" in api:
-                usd_oz = round(data["spot_usd_oz"], 2)
-                usd_cny = round(data["currency_rates"]["USD_CNY"], 4)
-                cny_oz = round(usd_oz * usd_cny, 2)
-                cny_gram = round(cny_oz / 31.1035, 2)
-                return {
-                    "usd_oz": usd_oz,
-                    "cny_gram": cny_gram,
-                    "usd_cny_rate": usd_cny,
-                    "source": "xaus国际现货"
-                }
+                oz = round(d["spot_usd_oz"], 2)
+                rate = round(d["currency_rates"]["USD_CNY"], 4)
+                g = round((oz * rate) / 31.1035, 2)
+                return {"usd_oz":oz, "cny_gram":g, "usd_cny_rate":rate, "source":"xaus国际现货"}
             elif "freegoldapi" in api:
-                last_item = data[-1]
-                usd_oz = round(last_item["price"], 2)
-                usd_cny = 7.22
-                cny_oz = round(usd_oz * usd_cny, 2)
-                cny_gram = round(cny_oz / 31.1035, 2)
-                return {
-                    "usd_oz": usd_oz,
-                    "cny_gram": cny_gram,
-                    "usd_cny_rate": usd_cny,
-                    "source": "freegold兜底数据源"
-                }
+                last = d[-1]
+                oz = round(last["price"], 2)
+                rate = 7.22
+                g = round((oz * rate) / 31.1035, 2)
+                return {"usd_oz":oz, "cny_gram":g, "usd_cny_rate":rate, "source":"freegold兜底数据源"}
         except Exception as e:
-            print(f"接口 {api} 请求失败，切换下一个，错误：{str(e)}")
+            print(f"{api} 请求异常: {e}")
             time.sleep(1)
-    raise Exception("所有金价接口均访问失败，请检查容器网络")
+    raise Exception("所有金价接口全部失效")
 
 def get_stock_info(code_str):
-    """A股/基金统一行情文本，增加数组长度判断防止下标越界"""
-    code_list = code_str.split()
-    line_list = []
-    code_param = ""
-    for code in code_list:
-        if code.startswith("6"):
-            code_param += f"sh{code},"
-        else:
-            code_param += f"sz{code},"
-    code_param = code_param.rstrip(",")
-    url = f"http://hq.sinajs.cn/list={code_param}"
-    headers = {"User-Agent": "Mozilla/5.0 Python Script", "Referer": "http://finance.sina.com.cn"}
+    param = ""
+    for c in code_str.split():
+        param += f"sh{c}," if c.startswith("6") else f"sz{c},"
+    url = f"http://hq.sinajs.cn/list={param.rstrip(',')}"
+    buf = []
     try:
-        res = requests.get(url, headers=headers, timeout=TIMEOUT)
-        raw_text = res.text
-        lines = raw_text.strip().split(";")
-        for line in lines:
+        r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        for line in r.text.split(";"):
             if not line or '="' not in line:
                 continue
-            data_part = line.split('"')[1]
-            arr = data_part.split(",")
-            # 字段不足直接跳过，避免下标报错
-            if len(arr) < 30:
-                line_list.append("数据字段缺失，读取失败")
-                line_list.append("-" * 30)
+            raw = line.split('"')[1].split(",")
+            if len(raw) < 30:
+                buf += ["行情字段缺失", "-"*30]
                 continue
-            name = arr[0]
-            now = float(arr[3])
-            last_close = float(arr[2])
-            yesterday_price = float(arr[1])
-            change = round(now - last_close, 2)
-            change_pct = round((change / last_close) * 100, 2)
-            last_day_change = round(last_close - yesterday_price, 2)
-            last_day_pct = round((last_day_change / yesterday_price) * 100, 2)
+            name, now, close, yest = raw[0], float(raw[3]), float(raw[2]), float(raw[1])
+            chg = round(now - close, 2)
+            chg_pct = round((chg / close)*100, 2)
+            day_chg = round(close - yest, 2)
+            day_pct = round((day_chg / yest)*100, 2)
             code = line.split("=")[0].split("_")[-1]
-            line_list.append(f"{code} {name}")
-            line_list.append(f"当前价位：{now} 元")
-            line_list.append(f"昨日收盘：{last_close} 元")
-            line_list.append(f"当日涨跌：{change} 元（{change_pct}%）")
-            line_list.append(f"昨日涨跌：{last_day_change} 元（{last_day_pct}%）")
-            line_list.append("-" * 30)
+            buf += [
+                f"{code} {name}",
+                f"现价{now} 昨收{close}",
+                f"当日{chg}元({chg_pct}%)",
+                f"前日{day_chg}元({day_pct}%)",
+                "-"*30
+            ]
     except Exception as e:
-        line_list.append(f"A股行情获取失败：{str(e)}")
-    return "\n".join(line_list)
+        buf.append(f"A股接口失败:{e}")
+    return "\n".join(buf)
 
-def get_us_index(usd_rate):
-    """纳指、标普500，增加字段长度容错"""
-    index_codes = ["int_nasdaq", "int_sp500"]
-    url = f"http://hq.sinajs.cn/list={','.join(index_codes)}"
-    headers = {"User-Agent": "Mozilla/5.0 Python Script", "Referer": "http://finance.sina.com.cn"}
-    line_list = []
+# 修复后美股指数函数
+def get_us_index(rate):
+    url = "http://hq.sinajs.cn/list=int_nasdaq,int_sp500"
+    buf = []
     try:
-        res = requests.get(url, headers=headers, timeout=TIMEOUT)
-        raw = res.text.strip().split(";")
-        for line in raw:
+        r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        content = r.text
+        for line in content.split(";"):
+            line = line.strip()
             if not line or '="' not in line:
                 continue
-            data = line.split('"')[1].split(",")
-            if len(data) < 5:
-                line_list.append("指数数据字段不足，读取失败")
-                line_list.append("-" * 30)
+            raw_str = line.split('"')[1]
+            data = raw_str.split(",")
+            if len(data) < 4:
+                buf.extend([f"指数行数据残缺，跳过该行", "-"*30])
                 continue
-            idx_name = data[0]
-            now = float(data[1])
-            change = float(data[2])
-            change_pct = float(data[3])
+            try:
+                idx_name = data[0]
+                now = float(data[1])
+                change = float(data[2])
+                change_pct = float(data[3])
+                yesterday_point = float(data[4]) if len(data)>=5 else now
+            except ValueError:
+                buf.extend([f"{data[0]} 数值转换失败", "-"*30])
+                continue
+
             last_close = round(now - change, 2)
-            yesterday_point = float(data[4])
             last_day_change = round(last_close - yesterday_point, 2)
-            last_day_pct = round((last_day_change / yesterday_point) * 100, 2)
-            cny_price = round(now * usd_rate, 2)
-            line_list.append(f"{idx_name}")
-            line_list.append(f"当前价位：{now} 点（折合人民币 {cny_price}）")
-            line_list.append(f"昨日收盘：{last_close} 点")
-            line_list.append(f"当日涨跌：{change} 点（{change_pct}%）")
-            line_list.append(f"昨日涨跌：{last_day_change} 点（{last_day_pct}%）")
-            line_list.append("-" * 30)
+            last_day_pct = round((last_day_change / yesterday_point)*100, 2) if yesterday_point !=0 else 0
+            rmb = round(now * rate, 2)
+
+            buf += [
+                idx_name,
+                f"点位{now} 折合{rmb}元 昨收{last_close}",
+                f"当日{change}点({change_pct}%)",
+                f"前日{last_day_change}点({last_day_pct}%)",
+                "-"*30
+            ]
     except Exception as e:
-        line_list.append(f"美股指数获取失败：{str(e)}")
-    return "\n".join(line_list)
+        buf.append(f"美股接口整体请求失败:{e}")
+    return "\n".join(buf)
 
 if __name__ == "__main__":
     try:
-        gold_data = get_gold_data()
-        usd_cny_rate = gold_data["usd_cny_rate"]
-        gram_price = gold_data["cny_gram"]
-        etf_price = round(gram_price * ETF_GRAM_PER_SHARE, 2)
-
-        gold_block = [
+        gd = get_gold_data()
+        rt, gram = gd["usd_cny_rate"], gd["cny_gram"]
+        etf_price = round(gram * ETF_GRAM_PER_SHARE, 2)
+        msg_parts = [
             "【黄金行情】",
-            f"数据源：{gold_data['source']}",
-            f"伦敦金现价：{gold_data['usd_oz']} 美元/盎司",
-            f"美元兑人民币汇率：1USD = {usd_cny_rate}",
-            f"国内金价：{gram_price} 元/克",
-            f"{ETF_CODE}华安黄金ETF理论价：{etf_price} 元/份",
-            "-" * 30
+            f"数据源:{gd['source']}",
+            f"伦敦金:{gd['usd_oz']}美元/盎司",
+            f"汇率1USD={rt}",
+            f"国内金价:{gram}元/克",
+            f"{ETF_CODE}理论价:{etf_price}元/份",
+            "-"*30,
+            "\n【A股黄金ETF】",
+            get_stock_info(STOCK_CODES),
+            "\n【美股指数】",
+            get_us_index(rt)
         ]
-        gold_text = "\n".join(gold_block)
-
-        stock_text = "【A股/场内基金行情】\n" + get_stock_info(STOCK_CODES)
-        us_text = "【美股宽基指数行情】\n" + get_us_index(usd_cny_rate)
-
-        full_msg = f"{gold_text}\n\n{stock_text}\n\n{us_text}"
-        push_wechat("黄金+A股+纳指+标普500统一行情播报", full_msg)
-        print("推送完成")
-        print(full_msg)
+        full = "\n".join(msg_parts)
+        push_wechat("黄金+A股+美股行情播报", full)
+        print("执行完成\n", full)
     except Exception as err:
-        err_msg = f"行情脚本异常：{str(err)}"
-        push_wechat("行情脚本异常提醒", err_msg)
-        print(err_msg)
+        err_txt = f"脚本全局异常：{err}"
+        push_wechat("行情脚本异常提醒", err_txt)
+        print(err_txt)
