@@ -9,15 +9,15 @@
       黄金→释放→美股→释放→虚拟币→释放，杜绝多段大字符串同时占用RAM
 优化4：屏蔽stdout/stderr输出至/dev/null，不读写闪存，无日志文件占用存储空间
 优化5：移除kill_self强制系统杀进程逻辑，避免系统调用瞬间内存暴涨触发OOM 137
-优化6：缩短sleep休眠时长(0.2/0.3s)，减少网络对象驻留内存时间
+优化6：合理sleep休眠时长(0.3s)，避免请求过快触发交易所接口限流封禁
 优化7：数组拼接使用join替代循环append，减少内存字符串碎片
 优化8：无全局长列表、无大常量缓存，行情文本用完立即销毁
 优化9：仅保留2个必要请求头，砍掉多余HTTP头减少内存缓存
 UA内存占用极低，仅两个短字符串，不会消耗宝贵路由内存
 ===== 【当前兼容适配说明】
-1. 恢复轻量Session会话，解决逐币种单次请求握手超时、虚拟币访问失败问题
-2. 新浪美股域名易被运营商拦截，拦截后输出明确提示文字，不会整块空白消失
-3. 无代理环境下黄金接口永久稳定，OKX虚拟币接口恢复正常拉取
+1. 恢复Session长连接复用、0.3s请求间隔，解决OKX接口频繁访问失败问题
+2. 新浪美股域名易被IP拦截，拦截后显示明确提示，不会空白板块
+3. 无代理环境下黄金接口永久稳定，OKX虚拟币恢复正常拉取
 ===== 【标的增删配置区 在此修改币种/指数/股票】
 US_INDEX_LIST：新浪美股代码 int_nasdaq=纳斯达克 int_sp500=标普500
 CRYPTO_LIST：OKX虚拟币，仅填大写标识（BTC/ETH/SOL）自动拼接XX-USDT交易对
@@ -33,16 +33,17 @@ sys.stderr = open(os.devnull, 'w')
 GLOBAL_TIMEOUT = 8
 # 优化1：极简基础Session，不挂载重试适配器，仅基础连接池，内存占用极低
 SESS = requests.Session()
-SESS.keep_alive = False
-# 优化2/9：超轻量UA，内存占用≈0.02M，仅基础伪装，适配精简Python
+# 修复点：移除keep_alive=False，允许长连接复用，OKX校验会话正常识别
+# SESS.keep_alive = False
+# 优化2/9：超轻量极简UA，仅2个必要头，内存占用≈0.02M，规避新浪403拦截
 HEADERS = {
     "User-Agent": "curl/7.68.0",
-    "Connection": "close"
+    "Connection": "keep-alive"
 }
 
 # ====================== 顶部增删配置区 ======================
 PUSH_TOKEN = "cdc7db6c36da46c1b877543016be3cba"
-# A股基金列表（默认不输出）
+# A股基金列表（默认不输出，如需推送解开主程序拼接注释）
 STOCK_LIST = [
     "518880",
     # "600036"
@@ -51,14 +52,14 @@ STOCK_LIST = [
 US_INDEX_LIST = ["int_nasdaq", "int_sp500"]
 # 虚拟币列表 OKX接口
 CRYPTO_LIST = ["BTC", "ETH"]
-# 黄金数据源
+# 黄金备用多数据源
 API_LIST = [
     "https://api.freejk.com/shuju/jinjia/",
     "https://xaus.com/api/v1/spot",
     "https://freegoldapi.com/data/latest.json"
 ]
 ETF_CODE, ETF_GRAM_PER_SHARE = "518880", 0.01
-# ==========================================================
+# ==============================================================
 
 # 微信推送 复用Session轻量化请求
 def push_wechat(title, content):
@@ -71,16 +72,17 @@ def push_wechat(title, content):
         )
     except Exception:
         pass
+    # 优化3：强制回收临时请求对象内存
     gc.collect()
 
-# 黄金汇率获取 复用Session持久连接，避免频繁握手失败
+# 黄金汇率获取 复用Session持久连接
 def get_gold_data():
     for api in API_LIST:
         try:
             resp = SESS.get(api, headers=HEADERS, timeout=GLOBAL_TIMEOUT)
             resp.raise_for_status()
             data = resp.json()
-            del resp
+            del resp # 优化3：销毁网络响应对象
             if "freejk" in api:
                 oz = round(data["data"]["international_price"], 2)
                 gram = round(data["data"]["price"], 2)
@@ -96,16 +98,17 @@ def get_gold_data():
                 oz = round(last_item["price"], 2)
                 rate, gram = 7.22, round((oz * rate) / 31.1035, 2)
                 res = {"usd_oz": oz, "cny_gram": gram, "usd_cny_rate": rate, "source": "freegold兜底数据源"}
-            del data
+            del data # 优化3：销毁json大对象
             gc.collect()
             return res
         except Exception:
-            time.sleep(0.3)
+            time.sleep(0.3) # 优化6：标准间隔，不触发限流
             gc.collect()
     raise Exception("黄金接口全部请求失败")
 
-# A股解析（保留，默认不启用）
+# A股函数保留，默认不启用
 def get_stock_info(code_list):
+    # 优化7：join拼接，减少字符串碎片内存占用
     code_param = ",".join(code_list)
     url = f"http://hq.sinajs.cn/list={code_param}"
     buf = []
@@ -136,7 +139,7 @@ def get_stock_info(code_list):
     gc.collect()
     return "\n".join(buf)
 
-# 美股新浪轻量解析 复用Session，拦截空白会输出提示文字
+# 美股新浪轻量解析 极简逻辑
 def get_us_index(rate, idx_list):
     buf = []
     url = f"http://hq.sinajs.cn/list={','.join(idx_list)}"
@@ -145,7 +148,7 @@ def get_us_index(rate, idx_list):
         text_lines = resp.text.split(";")
         del resp
         if not "".join(text_lines).strip():
-            buf.append("新浪美股域名被运营商拦截，返回空白数据")
+            buf.append("新浪接口空白/403拦截")
             buf.append("----------------------------------------")
             return "\n".join(buf)
         for line in text_lines:
@@ -175,55 +178,61 @@ def get_us_index(rate, idx_list):
                 "----------------------------------------"
             ]
         if len(buf) == 0:
-            buf.append("无有效美股指数行情数据")
+            buf.append("无有效美股指数数据")
     except Exception as err:
         buf.append(f"美股拉取失败：{str(err)}")
     gc.collect()
     return "\n".join(buf)
 
-# OKX虚拟币 复用全局Session持久连接，解决频繁新建连接握手超时访问失败
+# OKX虚拟币 恢复0.3s间隔+长连接，增加单次重试容错，保持今日/昨日/24h涨幅完整字段
 def get_crypto_info(coin_list, usd_rate):
     buf = []
     base_url = "https://www.okx.com/api/v5/market/ticker"
     for coin in coin_list:
         inst_id = f"{coin}-USDT"
-        try:
-            resp = SESS.get(f"{base_url}?instId={inst_id}", headers=HEADERS, timeout=GLOBAL_TIMEOUT)
-            resp.raise_for_status()
-            json_data = resp.json()
-            del resp
-            data = json_data["data"][0]
-            sym = coin
-            usd_now = round(float(data["last"]), 2)
-            usd_today_open = round(float(data["sodUtc8"]), 2)
-            usd_24h_open = round(float(data["open24h"]), 2)
-            cny_now = round(usd_now * usd_rate, 2)
-            cny_today_open = round(usd_today_open * usd_rate, 2)
-            today_chg_usd = round(usd_now - usd_today_open, 2)
-            today_chg_pct = round((today_chg_usd / usd_today_open)*100, 2) if usd_today_open !=0 else 0
-            chg_24h_pct = round(float(data["price_change_percentage_24h"]), 2)
-            usd_yesterday_close = usd_today_open
-            usd_yesterday_open = round(2 * usd_24h_open - usd_today_open, 2)
-            yesterday_chg_usd = round(usd_yesterday_close - usd_yesterday_open, 2)
-            yesterday_chg_pct = round((yesterday_chg_usd / usd_yesterday_open)*100, 2) if usd_yesterday_open !=0 else 0
-            cny_yesterday_close = round(usd_yesterday_close * usd_rate, 2)
-            buf += [
-                f"{sym}",
-                f"现价：${usd_now} | 折合人民币¥{cny_now}",
-                f"今日开盘(早8点)：${usd_today_open} 折合¥{cny_today_open}",
-                f"昨日收盘：${usd_yesterday_close} 折合¥{cny_yesterday_close}",
-                f"今日涨幅：${today_chg_usd}（{today_chg_pct}%）",
-                f"昨日涨幅：${yesterday_chg_usd}（{yesterday_chg_pct}%）",
-                f"24小时涨幅：{chg_24h_pct}%",
-                "----------------------------------------"
-            ]
-            del json_data, data
-            gc.collect()
-        except Exception:
-            buf.append(f"{coin} OKX接口访问失败")
-            buf.append("----------------------------------------")
-            gc.collect()
-            time.sleep(0.2)
+        # 修复：循环间隔拉长到0.3s，避免OKX限流
+        time.sleep(0.3)
+        retry_cnt = 1
+        while retry_cnt >= 0:
+            try:
+                resp = SESS.get(f"{base_url}?instId={inst_id}", headers=HEADERS, timeout=GLOBAL_TIMEOUT)
+                resp.raise_for_status()
+                json_data = resp.json()
+                del resp
+                data = json_data["data"][0]
+                sym = coin
+                usd_now = round(float(data["last"]), 2)
+                usd_today_open = round(float(data["sodUtc8"]), 2)
+                usd_24h_open = round(float(data["open24h"]), 2)
+                cny_now = round(usd_now * usd_rate, 2)
+                cny_today_open = round(usd_today_open * usd_rate, 2)
+                today_chg_usd = round(usd_now - usd_today_open, 2)
+                today_chg_pct = round((today_chg_usd / usd_today_open)*100, 2) if usd_today_open !=0 else 0
+                chg_24h_pct = round(float(data["price_change_percentage_24h"]), 2)
+                usd_yesterday_close = usd_today_open
+                usd_yesterday_open = round(2 * usd_24h_open - usd_today_open, 2)
+                yesterday_chg_usd = round(usd_yesterday_close - usd_yesterday_open, 2)
+                yesterday_chg_pct = round((yesterday_chg_usd / usd_yesterday_open)*100, 2) if usd_yesterday_open !=0 else 0
+                cny_yesterday_close = round(usd_yesterday_close * usd_rate, 2)
+                buf += [
+                    f"{sym}",
+                    f"现价：${usd_now} | 折合人民币¥{cny_now}",
+                    f"今日开盘(早8点)：${usd_today_open} 折合¥{cny_today_open}",
+                    f"昨日收盘：${usd_yesterday_close} 折合¥{cny_yesterday_close}",
+                    f"今日涨幅：${today_chg_usd}（{today_chg_pct}%）",
+                    f"昨日涨幅：${yesterday_chg_usd}（{yesterday_chg_pct}%）",
+                    f"24小时涨幅：{chg_24h_pct}%",
+                    "----------------------------------------"
+                ]
+                del json_data, data
+                gc.collect()
+                break
+            except Exception:
+                retry_cnt -= 1
+                if retry_cnt == 0:
+                    buf.append(f"{coin} OKX欧易接口访问失败")
+                    buf.append("----------------------------------------")
+                    gc.collect()
     return "\n".join(buf)
 
 if __name__ == "__main__":
@@ -246,26 +255,25 @@ if __name__ == "__main__":
         del gold_info, gold_block
         gc.collect()
 
-        # 获取美股（独立捕获全局异常，板块不会整块消失）
+        # 获取美股 独立捕获异常保证变量存在
         try:
             us_text = "===== 美股宽基指数 =====\n" + get_us_index(usd_ex, US_INDEX_LIST)
         except Exception as us_err:
-            us_text = f"===== 美股宽基指数 =====\n美股整体获取异常：{str(us_err)}\n----------------------------------------"
+            us_text = f"===== 美股宽基指数 =====\n美股整体获取异常：{str(us_err)}"
         gc.collect()
 
-        # 获取虚拟币（复用Session持久连接，恢复正常拉取）
+        # 获取虚拟币（修复长连接+0.3s间隔+单次重试，恢复正常拉取）
         crypto_text = "===== 虚拟币行情 =====\n" + get_crypto_info(CRYPTO_LIST, usd_ex)
         gc.collect()
 
-        # 合并单条完整微信消息推送
+        # 合并单条推送
         full_msg = f"{gold_text}\n{us_text}\n{crypto_text}"
         push_wechat("黄金+美股+BTC/ETH行情播报", full_msg)
 
-        # 推送完成彻底销毁全部大文本释放内存
+        # 全部内存释放
         del gold_text, us_text, crypto_text, full_msg
         gc.collect()
-
     except Exception as err:
-        push_wechat("行情脚本异常提醒", f"脚本全局错误：{str(err)}")
+        push_wechat("行情脚本异常提醒", f"全局错误：{str(err)}")
         gc.collect()
 # 优化5：无kill_self强制系统杀进程，执行完毕Python解释器自动正常退出，系统完整回收RAM
