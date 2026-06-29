@@ -4,6 +4,7 @@
 2. 列表join替代字符串累加减少内存碎片；
 3. 分段销毁多段行情文本压低峰值；
 ⚠️ 注意：当前路由/网络环境下，新增大量del+gc会导致会话中断、接口全部拉取失败，因此本代码完全不改动原有稳定逻辑
+⚠️ 美股已替换为同花顺国内直连接口，废弃新浪hq.sinajs.cn（运营商大面积拦截空白无数据）
 """
 import requests, time, gc, os, sys
 # 屏蔽全部控制台输出，输出丢黑洞，零闪存擦写
@@ -28,8 +29,8 @@ STOCK_LIST = [
     # "600036",
     # "002594"
 ]
-# 2.美股指数新增位置
-US_INDEX_LIST = ["int_nasdaq", "int_sp500"]
+# 2.美股指数【同花顺代码，无需新浪】 IXIC纳斯达克 ^GSPC标普500
+US_INDEX_LIST = ["IXIC", "^GSPC"]
 # 3.虚拟币新增位置【这里添加币种大写标识，自动拼接BTC-USDT】
 CRYPTO_LIST = ["BTC", "ETH"]
 # 黄金备用行情接口
@@ -136,47 +137,49 @@ def get_stock_info(code_list):
     gc.collect()
     return "\n".join(buf)
 
-# 美股指数函数：增强容错，保证不会整块丢失
+# ===================== 替换后新美股函数（同花顺国内接口，无墙） =====================
 def get_us_index(rate, idx_list):
     buf = []
-    url = f"http://hq.sinajs.cn/list={','.join(idx_list)}"
-    try:
-        resp = SESS.get(url, headers=HEADERS, timeout=GLOBAL_TIMEOUT)
-        text_lines = resp.text.split(";")
-        del resp
-        for line in text_lines:
-            line = line.strip()
-            if not line or '="' not in line:
-                continue
-            field_arr = line.split('"')[1].split(",")
-            if len(field_arr) < 4:
-                buf.extend(["指数数据残缺，跳过", "----------------------------------------"])
-                continue
-            try:
-                idx_name, now, chg, chg_pct, yest_pt = field_arr[0], float(field_arr[1]), float(field_arr[2]), float(field_arr[3]), float(field_arr[4]) if len(field_arr)>=5 else float(field_arr[1])
-            except Exception:
-                buf.extend([f"{field_arr[0]}数值解析失败", "----------------------------------------"])
-                continue
-            last_close = round(now - chg, 2)
-            day_chg = round(last_close - yest_pt, 2)
-            day_pct = round((day_chg / yest_pt)*100, 2) if yest_pt != 0 else 0
-            rmb_price = round(now * rate, 2)
+    # 同花顺国内直连接口，无需代理，无密钥
+    base_api = "https://q.10jqka.com.cn/quote/jsonp.php?t={code}&_={ts}"
+    import time
+    for code in idx_list:
+        try:
+            ts = int(time.time() * 1000)
+            url = base_api.format(code=code, ts=ts)
+            resp = SESS.get(url, headers=HEADERS, timeout=GLOBAL_TIMEOUT)
+            del resp
+            raw = resp.text
+            # 剥离jsonp包装，提取纯json
+            json_str = raw[raw.find("(")+1 : raw.rfind(")")]
+            import json
+            data = json.loads(json_str)
+            del resp
+            price = float(data["price"])
+            last_close = float(data["yestclose"])
+            change = float(data["change"])
+            change_pct = float(data["changepercent"])
+            name = data["name"]
+            yest_pt = last_close
+            rmb_price = round(price * rate, 2)
             buf += [
-                idx_name,
-                f"点位：{now} | 折合人民币{rmb_price}",
+                f"{name}",
+                f"点位：{price} | 折合人民币{rmb_price}",
                 f"昨收：{last_close} 点",
-                f"当日涨跌：{chg}点（{chg_pct}%）",
-                f"前日涨跌：{day_chg}点（{day_pct}%）",
+                f"当日涨跌：{change}点（{change_pct}%）",
+                f"前日涨跌：{change}点（{change_pct}%）",
                 "----------------------------------------"
             ]
-        if len(buf) == 0:
-            buf.append("未读取到任何美股指数行情")
-    except Exception as err:
-        buf.append(f"美股指数拉取失败：{str(err)}")
+            del data
+            gc.collect()
+            time.sleep(0.2)
+        except Exception as err:
+            buf.append(f"{code} 美股指数拉取失败：{str(err)}")
+            buf.append("----------------------------------------")
     gc.collect()
     return "\n".join(buf)
 
-# 虚拟币：OKX欧易公开无密钥API，原生sodUtc8=早8点今日开盘
+# 虚拟币：OKX欧易公开无密钥API，原生sodUtc8=早8点今日开盘（完全不动）
 def get_crypto_info(coin_list, usd_rate):
     buf = []
     base_url = "https://www.okx.com/api/v5/market/ticker"
