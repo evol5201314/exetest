@@ -209,12 +209,9 @@ def get_crypto_info(coin_list, usd_rate):
     gc.collect()
     return "\n".join(buf)
 
-# 移除kill_self强制杀进程函数，避免内存瞬间暴涨触发OOM
-# 脚本执行完毕解释器自动正常退出，操作系统自动回收全部RAM
-
 if __name__ == "__main__":
     try:
-        # 分步获取+分步释放，降低内存峰值
+        # 1.获取黄金
         gold_info = get_gold_data()
         usd_ex = gold_info["usd_cny_rate"]
         gram_price = gold_info["cny_gram"]
@@ -229,28 +226,26 @@ if __name__ == "__main__":
             "----------------------------------------"
         ]
         gold_text = "\n".join(gold_block)
-        # 先推送黄金，立刻释放黄金内存
-        push_wechat("黄金行情片段", gold_text)
-        del gold_info, gold_block, gold_text
+        del gold_info, gold_block
         gc.collect()
 
-        # 获取美股，推送后释放
+        # 2.获取美股
         us_text = "===== 美股宽基指数 =====\n" + get_us_index(usd_ex, US_INDEX_LIST)
-        push_wechat("美股指数片段", us_text)
-        del us_text
         gc.collect()
 
-        # 获取虚拟币，推送后释放
+        # 3.获取虚拟币
         crypto_text = "===== 虚拟币行情 =====\n" + get_crypto_info(CRYPTO_LIST, usd_ex)
-        push_wechat("虚拟币行情片段", crypto_text)
-        del crypto_text
         gc.collect()
 
-        # 如需合并一条推送（不拆分多条），注释上面分段推送，启用下面两行
-        # full_msg = f"{gold_text}\n{us_text}\n{crypto_text}"
-        # push_wechat("黄金+美股+BTC/ETH行情播报", full_msg)
+        # 合并全部内容，仅推送单条微信消息
+        full_msg = f"{gold_text}\n{us_text}\n{crypto_text}"
+        push_wechat("黄金+美股+BTC/ETH行情播报", full_msg)
+
+        # 释放全部大文本
+        del gold_text, us_text, crypto_text, full_msg
+        gc.collect()
 
     except Exception as err:
         push_wechat("行情脚本异常提醒", f"脚本全局异常：{str(err)}")
         gc.collect()
-    # 无强制kill逻辑，代码执行完毕Python解释器自动正常退出，内存完全回收
+    # 无强制kill代码，执行完毕解释器自动退出，系统回收内存
