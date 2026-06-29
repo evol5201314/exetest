@@ -10,8 +10,9 @@ API_LIST = [
     "https://xaus.com/api/v1/spot",
     "https://freegoldapi.com/data/latest.json"
 ]
-# 华安黄金ETF代码
 ETF_CODE = "518880"
+# 华安黄金ETF每份对应0.01克黄金
+ETF_GRAM_PER_SHARE = 0.01
 # ==========================
 
 def push_wechat(title, content):
@@ -82,14 +83,17 @@ def get_gold_data():
 if __name__ == "__main__":
     try:
         res = get_gold_data()
+        # 计算518880理论参考价
+        etf_theo_price = round(res["cny_gram"] * ETF_GRAM_PER_SHARE, 2)
         msg = f"""
 【手动查询·实时黄金行情】
 数据来源：{res['source']}
 场内黄金ETF代码：{ETF_CODE}（华安黄金ETF）
+ETF理论参考价：{etf_theo_price} 元/份
 伦敦金 XAUUSD：{res['usd_oz']} 美元/盎司
 美元兑人民币：1USD = {res['usd_cny_rate']} CNY
-折合人民币：{res['cny_gram']} 元/克
-换算标准：1盎司=31.1035克
+国内现货金价：{res['cny_gram']} 元/克
+换算标准：1盎司=31.1035克，1份ETF=0.01克黄金
         """.strip()
         push_wechat("黄金实时报价", msg)
         print("查询成功，微信推送已发送")
