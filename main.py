@@ -20,8 +20,8 @@ US_INDEX_LIST = [
     # "int_dji"       # 道琼斯（取消注释启用）
 ]
 
-# 3. 虚拟币配置 币安交易对
-CRYPTO_LIST = ["BTCUSDT", "ETHUSDT"]
+# 3. 虚拟币配置 coingecko标准id：btc=bitcoin eth=ethereum
+CRYPTO_LIST = ["bitcoin", "ethereum"]
 
 # 黄金行情数据源
 API_LIST = [
@@ -94,20 +94,18 @@ def get_stock_info(code_list):
             line = line.strip()
             if not line or '="' not in line:
                 continue
-            # 拆分标识与数据段
             left, data_str = line.split('"', 1)
             data_str = data_str.rstrip('"')
             arr = data_str.split(",")
             stock_code = left.split("_")[-1]
 
-            # 兜底初始化全部字段，防止下标缺失崩溃
-            name = "未知名称"
+            # 全部字段默认初始化，缺字段不会整条消失
+            name = "未知标的"
             now_price = 0.0
             last_close = 0.0
             change = 0.0
             change_pct = 0.0
 
-            # 分段容错赋值，缺字段不直接跳过整只股票
             if len(arr) >= 1:
                 name = arr[0]
             if len(arr) >= 3:
@@ -121,7 +119,6 @@ def get_stock_info(code_list):
                 except:
                     pass
 
-            # 计算涨跌（分母为0兜底）
             if last_close != 0:
                 change = round(now_price - last_close, 2)
                 change_pct = round((change / last_close) * 100, 2)
@@ -176,29 +173,40 @@ def get_us_index(rate, index_list):
         buf.append(f"美股指数接口失败：{e}")
     return "\n".join(buf)
 
-# 虚拟币 币安稳定接口
+# 修复虚拟币：CoinGecko多重试+备用域名，解决Actions访问失败
 def get_crypto_info(crypto_list, usd_rate):
     buf = []
-    base_url = "https://api.binance.com/api/v3/ticker/24hr"
-    for symbol in crypto_list:
+    coin_ids = ",".join(crypto_list)
+    # 双备用域名防拦截
+    domain_list = [
+        "https://api.coingecko.com/api/v3",
+        "https://pro-api.coingecko.com/api/v3"
+    ]
+    resp = None
+    # 重试2次
+    for domain in domain_list:
         try:
-            resp = requests.get(f"{base_url}?symbol={symbol}", headers=HEADERS, timeout=TIMEOUT)
+            url = f"{domain}/coins/markets?vs_currency=usd&ids={coin_ids}&order=market_cap_desc"
+            resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
             resp.raise_for_status()
-            data = resp.json()
-            symbol_name = symbol.replace("USDT","")
-            usd_price = round(float(data["lastPrice"]), 2)
-            cny_price = round(usd_price * usd_rate, 2)
-            change_24h = round(float(data["priceChangePercent"]), 2)
-
-            buf.append(f"【{symbol_name}】")
-            buf.append(f"美元价：${usd_price}")
-            buf.append(f"人民币：¥{cny_price}")
-            buf.append(f"24小时涨跌幅：{change_24h}%")
-            buf.append("-" * 30)
-            time.sleep(0.3)
-        except Exception as e:
-            buf.append(f"{symbol} 获取失败：{str(e)}")
-            buf.append("-" * 30)
+            break
+        except Exception as err:
+            print(f"虚拟币域名 {domain} 访问失败：{err}")
+            time.sleep(1)
+    if resp is None:
+        buf.append("全部虚拟币接口访问超时/被拦截，无法获取行情")
+        return "\n".join(buf)
+    coin_data = resp.json()
+    for coin in coin_data:
+        symbol = coin["symbol"].upper()
+        usd_price = round(coin["current_price"], 2)
+        cny_price = round(usd_price * usd_rate, 2)
+        change_24h = round(coin["price_change_percentage_24h"], 2)
+        buf.append(f"【{symbol}】")
+        buf.append(f"美元价：${usd_price}")
+        buf.append(f"人民币：¥{cny_price}")
+        buf.append(f"24小时涨跌幅：{change_24h}%")
+        buf.append("-" * 30)
     return "\n".join(buf)
 
 if __name__ == "__main__":
@@ -224,7 +232,7 @@ if __name__ == "__main__":
         stock_text = "===== 持仓股票行情 =====\n" + get_stock_info(STOCK_LIST)
         # 美股指数
         us_text = "===== 美股宽基指数 =====\n" + get_us_index(usd_rate, US_INDEX_LIST)
-        # 虚拟币
+        # 虚拟币（CoinGecko双域名重试）
         crypto_text = "===== 虚拟币行情 =====\n" + get_crypto_info(CRYPTO_LIST, usd_rate)
 
         # 合并推送内容
