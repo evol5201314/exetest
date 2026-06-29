@@ -10,6 +10,8 @@ API_LIST = [
     "https://xaus.com/api/v1/spot",
     "https://freegoldapi.com/data/latest.json"
 ]
+# 华安黄金ETF代码
+ETF_CODE = "518880"
 # ==========================
 
 def push_wechat(title, content):
@@ -39,7 +41,7 @@ def get_gold_data():
             if "freejk" in api:
                 usd_oz = round(data["data"]["international_price"], 2)
                 cny_gram = round(data["data"]["price"], 2)
-                rate = round(data["data"]["international_price"] / (data["data"]["price"] * 31.1035), 4)
+                rate = round((data["data"]["price"] * 31.1035) / data["data"]["international_price"], 4)
                 return {
                     "usd_oz": usd_oz,
                     "cny_gram": cny_gram,
@@ -83,6 +85,7 @@ if __name__ == "__main__":
         msg = f"""
 【手动查询·实时黄金行情】
 数据来源：{res['source']}
+场内黄金ETF代码：{ETF_CODE}（华安黄金ETF）
 伦敦金 XAUUSD：{res['usd_oz']} 美元/盎司
 美元兑人民币：1USD = {res['usd_cny_rate']} CNY
 折合人民币：{res['cny_gram']} 元/克
