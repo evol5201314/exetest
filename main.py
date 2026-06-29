@@ -20,8 +20,8 @@ US_INDEX_LIST = [
     # "int_dji"       # 道琼斯（取消注释启用）
 ]
 
-# 3. 虚拟币配置：btc eth，可自行添加
-CRYPTO_LIST = ["btc", "eth"]
+# 3. 虚拟币配置 币安交易对
+CRYPTO_LIST = ["BTCUSDT", "ETHUSDT"]
 
 # 黄金行情数据源
 API_LIST = [
@@ -78,7 +78,7 @@ def get_gold_data():
             time.sleep(1)
     raise Exception("所有金价接口全部失效")
 
-# A股批量行情
+# A股批量行情【重度修复个股数据缺失/残缺】
 def get_stock_info(code_list):
     code_param = ""
     for code in code_list:
@@ -88,29 +88,52 @@ def get_stock_info(code_list):
     buf = []
     try:
         r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-        for line in r.text.split(";"):
+        raw_text = r.text
+        lines = raw_text.split(";")
+        for line in lines:
             line = line.strip()
             if not line or '="' not in line:
                 continue
-            arr = line.split('"')[1].split(",")
-            if len(arr) < 30:
-                buf.append("个股数据残缺，读取失败")
-                buf.append("-" * 30)
-                continue
-            stock_code = line.split("=")[0].split("_")[-1]
-            name = arr[0]
-            now_price = float(arr[3])
-            last_close = float(arr[2])
-            change = round(now_price - last_close, 2)
-            change_pct = round((change / last_close) * 100, 2)
+            # 拆分标识与数据段
+            left, data_str = line.split('"', 1)
+            data_str = data_str.rstrip('"')
+            arr = data_str.split(",")
+            stock_code = left.split("_")[-1]
+
+            # 兜底初始化全部字段，防止下标缺失崩溃
+            name = "未知名称"
+            now_price = 0.0
+            last_close = 0.0
+            change = 0.0
+            change_pct = 0.0
+
+            # 分段容错赋值，缺字段不直接跳过整只股票
+            if len(arr) >= 1:
+                name = arr[0]
+            if len(arr) >= 3:
+                try:
+                    last_close = float(arr[2])
+                except:
+                    pass
+            if len(arr) >= 4:
+                try:
+                    now_price = float(arr[3])
+                except:
+                    pass
+
+            # 计算涨跌（分母为0兜底）
+            if last_close != 0:
+                change = round(now_price - last_close, 2)
+                change_pct = round((change / last_close) * 100, 2)
 
             buf.append(f"【{stock_code} {name}】")
             buf.append(f"现价：{now_price} 元")
             buf.append(f"昨收：{last_close} 元")
             buf.append(f"今日涨跌：{change} 元（{change_pct}%）")
             buf.append("-" * 30)
+
     except Exception as e:
-        buf.append(f"股票接口请求失败：{e}")
+        buf.append(f"股票接口整体请求失败：{e}")
     return "\n".join(buf)
 
 # 美股指数批量行情
@@ -153,27 +176,29 @@ def get_us_index(rate, index_list):
         buf.append(f"美股指数接口失败：{e}")
     return "\n".join(buf)
 
-# 新增：虚拟币 BTC/ETH 行情
+# 虚拟币 币安稳定接口
 def get_crypto_info(crypto_list, usd_rate):
     buf = []
-    try:
-        ids = ",".join(crypto_list)
-        url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={ids}&order=market_cap_desc"
-        resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-        resp.raise_for_status()
-        coin_data = resp.json()
-        for coin in coin_data:
-            symbol = coin["symbol"].upper()
-            usd_price = round(coin["current_price"], 2)
+    base_url = "https://api.binance.com/api/v3/ticker/24hr"
+    for symbol in crypto_list:
+        try:
+            resp = requests.get(f"{base_url}?symbol={symbol}", headers=HEADERS, timeout=TIMEOUT)
+            resp.raise_for_status()
+            data = resp.json()
+            symbol_name = symbol.replace("USDT","")
+            usd_price = round(float(data["lastPrice"]), 2)
             cny_price = round(usd_price * usd_rate, 2)
-            change_24h = round(coin["price_change_percentage_24h"], 2)
-            buf.append(f"【{symbol}】")
+            change_24h = round(float(data["priceChangePercent"]), 2)
+
+            buf.append(f"【{symbol_name}】")
             buf.append(f"美元价：${usd_price}")
             buf.append(f"人民币：¥{cny_price}")
             buf.append(f"24小时涨跌幅：{change_24h}%")
             buf.append("-" * 30)
-    except Exception as e:
-        buf.append(f"虚拟币接口获取失败：{str(e)}")
+            time.sleep(0.3)
+        except Exception as e:
+            buf.append(f"{symbol} 获取失败：{str(e)}")
+            buf.append("-" * 30)
     return "\n".join(buf)
 
 if __name__ == "__main__":
