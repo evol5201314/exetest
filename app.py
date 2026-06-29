@@ -84,7 +84,7 @@ HISTORY_FILE = "/tmp/script_history.json"
 # ========== 同步框默认内容（修改后会自动保存到自身脚本） ==========
 # 格式: https://{token}@github.com/{用户名}/{仓库名}
 # 首次运行会使用下面的默认值，点击同步后可修改并自动保存
-tongbukuang = "https://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@github.com/evol5201314/exetese"
+tongbukuang = "https://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@github.com/evol5201314/exetest"
 
 def init_files():
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
