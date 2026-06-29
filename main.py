@@ -1,4 +1,7 @@
-import requests, time, gc, os, sys
+"""
+===== 【OpenWrt 低内存专用优化说明 请勿删除以下轻量化逻辑】
+"""
+硬件环境：路由可用内存仅≈50M，精简python，峰值内存控制≤13Mimport requests, time, gc, os, sys
 # 屏蔽全部控制台输出，输出丢黑洞，零闪存擦写
 sys.stdout = open(os.devnull, 'w')
 sys.stderr = open(os.devnull, 'w')
