@@ -5,22 +5,14 @@ import time
 PUSH_TOKEN = "cdc7db6c36da46c1b877543016be3cba"
 TIMEOUT = 12
 
-# 1. A股/场内基金列表，自动区分沪sh/深sz
-STOCK_LIST = [
-    "518880",
-    # "600036",
-    # "000001",
-    # "300750"
-]
-
-# 2. 美股指数列表
+# 美股指数列表
 US_INDEX_LIST = [
     "int_nasdaq",    # 纳斯达克
     "int_sp500"      # 标普500
     # "int_dji"       # 道琼斯（取消注释启用）
 ]
 
-# 3. 虚拟币配置 coingecko标准id：btc=bitcoin eth=ethereum
+# 虚拟币配置 coingecko标准id：bitcoin=BTC ethereum=ETH
 CRYPTO_LIST = ["bitcoin", "ethereum"]
 
 # 黄金行情数据源
@@ -78,61 +70,6 @@ def get_gold_data():
             time.sleep(1)
     raise Exception("所有金价接口全部失效")
 
-# A股批量行情【重度修复个股数据缺失/残缺】
-def get_stock_info(code_list):
-    code_param = ""
-    for code in code_list:
-        code_param += f"sh{code}," if code.startswith("6") else f"sz{code},"
-    code_param = code_param.rstrip(",")
-    url = f"http://hq.sinajs.cn/list={code_param}"
-    buf = []
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
-        raw_text = r.text
-        lines = raw_text.split(";")
-        for line in lines:
-            line = line.strip()
-            if not line or '="' not in line:
-                continue
-            left, data_str = line.split('"', 1)
-            data_str = data_str.rstrip('"')
-            arr = data_str.split(",")
-            stock_code = left.split("_")[-1]
-
-            # 全部字段默认初始化，缺字段不会整条消失
-            name = "未知标的"
-            now_price = 0.0
-            last_close = 0.0
-            change = 0.0
-            change_pct = 0.0
-
-            if len(arr) >= 1:
-                name = arr[0]
-            if len(arr) >= 3:
-                try:
-                    last_close = float(arr[2])
-                except:
-                    pass
-            if len(arr) >= 4:
-                try:
-                    now_price = float(arr[3])
-                except:
-                    pass
-
-            if last_close != 0:
-                change = round(now_price - last_close, 2)
-                change_pct = round((change / last_close) * 100, 2)
-
-            buf.append(f"【{stock_code} {name}】")
-            buf.append(f"现价：{now_price} 元")
-            buf.append(f"昨收：{last_close} 元")
-            buf.append(f"今日涨跌：{change} 元（{change_pct}%）")
-            buf.append("-" * 30)
-
-    except Exception as e:
-        buf.append(f"股票接口整体请求失败：{e}")
-    return "\n".join(buf)
-
 # 美股指数批量行情
 def get_us_index(rate, index_list):
     code_str = ",".join(index_list)
@@ -173,17 +110,15 @@ def get_us_index(rate, index_list):
         buf.append(f"美股指数接口失败：{e}")
     return "\n".join(buf)
 
-# 修复虚拟币：CoinGecko多重试+备用域名，解决Actions访问失败
+# 虚拟币函数：对齐美股格式，新增昨日价格、前日涨跌
 def get_crypto_info(crypto_list, usd_rate):
     buf = []
     coin_ids = ",".join(crypto_list)
-    # 双备用域名防拦截
     domain_list = [
         "https://api.coingecko.com/api/v3",
         "https://pro-api.coingecko.com/api/v3"
     ]
     resp = None
-    # 重试2次
     for domain in domain_list:
         try:
             url = f"{domain}/coins/markets?vs_currency=usd&ids={coin_ids}&order=market_cap_desc"
@@ -202,11 +137,16 @@ def get_crypto_info(crypto_list, usd_rate):
         usd_price = round(coin["current_price"], 2)
         cny_price = round(usd_price * usd_rate, 2)
         change_24h = round(coin["price_change_percentage_24h"], 2)
-        buf.append(f"【{symbol}】")
-        buf.append(f"美元价：${usd_price}")
-        buf.append(f"人民币：¥{cny_price}")
-        buf.append(f"24小时涨跌幅：{change_24h}%")
-        buf.append("-" * 30)
+        change_usd = round(coin["price_change_24h"], 2)
+        yesterday_usd = round(usd_price - change_usd, 2)
+        yesterday_cny = round(yesterday_usd * usd_rate, 2)
+        buf += [
+            f"{symbol}",
+            f"现价：${usd_price} | 折合人民币¥{cny_price}",
+            f"昨收：${yesterday_usd} 折合¥{yesterday_cny}",
+            f"24小时涨跌：${change_usd}（{change_24h}%）",
+            "-"*30
+        ]
     return "\n".join(buf)
 
 if __name__ == "__main__":
@@ -228,16 +168,14 @@ if __name__ == "__main__":
             "-" * 40
         ])
 
-        # A股
-        stock_text = "===== 持仓股票行情 =====\n" + get_stock_info(STOCK_LIST)
         # 美股指数
         us_text = "===== 美股宽基指数 =====\n" + get_us_index(usd_rate, US_INDEX_LIST)
-        # 虚拟币（CoinGecko双域名重试）
+        # 虚拟币（对齐统一格式，新增昨日价格、前日涨跌）
         crypto_text = "===== 虚拟币行情 =====\n" + get_crypto_info(CRYPTO_LIST, usd_rate)
 
-        # 合并推送内容
-        full_msg = f"{gold_text}\n{stock_text}\n{us_text}\n{crypto_text}"
-        push_wechat("黄金+股票+美股+BTC/ETH行情播报", full_msg)
+        # 合并推送内容（已删除股票板块）
+        full_msg = f"{gold_text}\n{us_text}\n{crypto_text}"
+        push_wechat("黄金+美股+BTC/ETH行情播报", full_msg)
         print("推送完成！\n", full_msg)
 
     except Exception as err:
