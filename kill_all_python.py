@@ -3,7 +3,7 @@ import os
 import subprocess
 import signal
 import time
-
+beizhu = "📈 关闭并清理python进程 面板也关闭"
 def kill_all_python():
     my_pid = os.getpid()
     
