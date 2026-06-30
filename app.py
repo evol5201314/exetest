@@ -6,7 +6,7 @@
 屏蔽stdout/stderr输出至/dev/null，不读写闪存，无日志文件占用存储空间
 保留下方备注方便查看脚本详情
 """
-beizhu = "📈 面板程序 (系统工具增强版 + Cron管理 + APK缓存清理)"
+beizhu = "📈 面板程序 (系统工具增强版)"
 """
 ============================================================
 🐍 脚本面板 - 系统工具增强版
@@ -36,7 +36,7 @@ HISTORY_FILE = "/tmp/script_history.json"
 CRONTAB_FILE = "/etc/crontabs/root"
 
 # ========== 同步框默认内容 ==========
-tongbukuang = "https://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@github.com/evol5201314/exetest"
+tongbukuang = "https://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/evol5201314/exetest"
 
 def init_files():
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
@@ -128,12 +128,14 @@ def kill_process_on_port(port=5000):
         pass
     return True
 
-# ========== 获取路由器IP ==========
+# ========== 获取路由器IP（修复：去掉/24后缀） ==========
 def get_router_ip():
     try:
         result = subprocess.run(["uci", "get", "network.lan.ipaddr"], capture_output=True, text=True, timeout=2)
         ip = result.stdout.strip()
         if ip:
+            if '/' in ip:
+                ip = ip.split('/')[0]
             return ip
     except:
         pass
@@ -142,6 +144,8 @@ def get_router_ip():
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
+        if '/' in ip:
+            ip = ip.split('/')[0]
         return ip
     except:
         pass
@@ -788,7 +792,8 @@ def force_gc():
     return jsonify({'message': '✅ 垃圾回收已执行'})
 
 # ==================== HTML 模板 ====================
-HTML = '''<!DOCTYPE html>
+HTML = r'''
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -914,28 +919,28 @@ select{appearance:auto;background:#fff}
 <div class="num" id="cacheSize">-- MB</div>
 <div class="label">📦 APK缓存</div>
 </div>
-<div class="stat-card" style="flex:0"><button class="refresh-btn" onclick="loadAll()">🔄 刷新</button></div>
+<div class="stat-card" style="flex:0"><button class="refresh-btn" id="refreshBtn">🔄 刷新</button></div>
 </div>
 
 <!-- 按钮组1: 脚本管理 -->
 <div class="actions-bar">
 <span class="group-label">📜 脚本</span>
-<button class="btn-new" onclick="showNewModal()">➕ 新建</button>
-<button class="btn-upload" onclick="document.getElementById('fileInput').click()">📤 上传</button>
-<button class="btn-sync" onclick="showSyncModal()">📥 同步</button>
-<button class="btn-gc" onclick="forceGC()">🧹 GC</button>
-<button class="btn-cron" onclick="showCronModal()">⏰ 定时</button>
-<input type="file" id="fileInput" accept=".py" style="display:none" onchange="uploadFile(this)">
+<button class="btn-new" id="btnNew">➕ 新建</button>
+<button class="btn-upload" id="btnUpload">📤 上传</button>
+<button class="btn-sync" id="btnSync">📥 同步</button>
+<button class="btn-gc" id="btnGc">🧹 GC</button>
+<button class="btn-cron" id="btnCron">⏰ 定时</button>
+<input type="file" id="fileInput" accept=".py" style="display:none">
 </div>
 
 <!-- 按钮组2: 路由器工具 -->
 <div class="actions-bar">
 <span class="group-label">⚙️ 路由</span>
-<button class="btn-luci" onclick="goLuci()">🌐 路由器</button>
-<button class="btn-9090" onclick="go9090()">🔧 后端</button>
-<button class="btn-reboot" onclick="rebootRouter()">🔄 重启路由</button>
-<button class="btn-kill" id="killBtn" onclick="killTopProcess()">💣 清理进程</button>
-<button class="btn-cache" onclick="cleanApkCache()">🧹 清理缓存</button>
+<button class="btn-luci" id="btnLuci">🌐 路由器</button>
+<button class="btn-9090" id="btn9090">🔧 后端</button>
+<button class="btn-reboot" id="btnReboot">🔄 重启路由</button>
+<button class="btn-kill" id="btnKill">💣 清理进程</button>
+<button class="btn-cache" id="btnCache">🧹 清理缓存</button>
 </div>
 
 <div class="grid" id="grid"></div>
@@ -943,36 +948,36 @@ select{appearance:auto;background:#fff}
 
 <!-- 新建脚本弹窗 -->
 <div class="modal" id="newModal"><div class="modal-box">
-<span class="close" onclick="closeNew()">&times;</span>
+<span class="close" id="closeNew">&times;</span>
 <h2>📝 新建脚本</h2>
 <div style="margin:12px 0"><label>文件名（.py）</label><input type="text" id="newName" placeholder="例如: monitor.py"></div>
 <div><label>代码内容</label><textarea id="newContent" placeholder="# 在此编写 Python 代码"></textarea></div>
-<div class="form-actions"><button class="btn-primary" onclick="createScript()">💾 保存</button><button class="btn-secondary" onclick="closeNew()">取消</button></div>
+<div class="form-actions"><button class="btn-primary" id="saveNew">💾 保存</button><button class="btn-secondary" id="cancelNew">取消</button></div>
 </div></div>
 
 <!-- 编辑脚本弹窗 -->
 <div class="modal" id="editModal"><div class="modal-box">
-<span class="close" onclick="closeEdit()">&times;</span>
+<span class="close" id="closeEdit">&times;</span>
 <h2>✏️ 编辑脚本</h2>
 <div style="margin:12px 0"><label id="editFileName">文件名</label><textarea id="editContent"></textarea></div>
-<div class="form-actions"><button class="btn-primary" onclick="saveEdit()">💾 保存</button><button class="btn-secondary" onclick="closeEdit()">取消</button></div>
+<div class="form-actions"><button class="btn-primary" id="saveEditBtn">💾 保存</button><button class="btn-secondary" id="cancelEdit">取消</button></div>
 </div></div>
 
 <!-- 同步脚本弹窗 -->
 <div class="modal" id="syncModal"><div class="modal-box">
-<span class="close" onclick="closeSync()">&times;</span>
+<span class="close" id="closeSync">&times;</span>
 <h2>📥 从 GitHub 同步脚本</h2>
 <div class="sync-input-group">
 <label>仓库地址（含 Token）</label>
 <input type="text" id="syncTongbukuang" placeholder="https://token@github.com/用户名/仓库名">
 <div class="hint">💡 格式：https://{token}@github.com/{用户名}/{仓库名}</div>
 </div>
-<div class="form-actions"><button class="btn-primary" onclick="doSync()">📥 开始同步</button><button class="btn-secondary" onclick="closeSync()">取消</button></div>
+<div class="form-actions"><button class="btn-primary" id="doSyncBtn">📥 开始同步</button><button class="btn-secondary" id="cancelSync">取消</button></div>
 </div></div>
 
 <!-- Cron 管理弹窗 -->
 <div class="modal" id="cronModal"><div class="modal-box">
-<span class="close" onclick="closeCron()">&times;</span>
+<span class="close" id="closeCron">&times;</span>
 <h2>⏰ 定时任务管理 (Cron)</h2>
 <div style="margin:12px 0;background:#f5f7fa;padding:12px;border-radius:8px">
 <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -984,327 +989,520 @@ select{appearance:auto;background:#fff}
 </div>
 </div>
 <div style="margin-top:6px"><label>自定义命令</label><input type="text" id="cronCustomCmd" placeholder="或直接输入完整命令"></div>
-<div class="form-actions"><button class="btn-success" onclick="addCronJob()">➕ 添加任务</button></div>
+<div class="form-actions"><button class="btn-success" id="addCronBtn">➕ 添加任务</button></div>
 <div style="margin-top:8px;font-size:12px;color:#888">💡 示例: <code>0 */6 * * *</code> = 每6小时执行一次</div>
 </div>
 <div style="margin-top:12px"><label>📋 当前任务列表</label>
 <div class="cron-grid" id="cronList"><div class="cron-empty">加载中...</div></div>
 </div>
-<div class="form-actions"><button class="btn-secondary" onclick="closeCron()">关闭</button></div>
+<div class="form-actions"><button class="btn-secondary" id="closeCronBtn">关闭</button></div>
 </div></div>
 
 <!-- 日志弹窗 -->
-<div class="modal" id="modal"><div class="modal-box"><span class="close" onclick="closeModal()">&times;</span><h2 id="mTitle">日志</h2><div class="meta" id="mMeta"></div><pre id="mContent">暂无</pre></div></div>
+<div class="modal" id="logModal"><div class="modal-box"><span class="close" id="closeLog">&times;</span><h2 id="logTitle">日志</h2><div class="meta" id="logMeta"></div><pre id="logContent">暂无</pre></div></div>
 
 <script>
-var routerIP = '';
+(function() {
+    'use strict';
 
-// ========== 状态映射 ==========
-function st(s){const map={idle:'待执行',running:'运行中',success:'成功',failed:'失败',timeout:'超时',error:'错误',stopped:'已停止'};return map[s]||s}
-function badge(s){return'<span class="badge '+s+'">'+st(s)+'</span>'}
+    var routerIP = '';
 
-// ========== 获取路由器IP ==========
-function fetchRouterIP(){
-    fetch('/api/router_ip').then(r=>r.json()).then(data=>{
-        routerIP = data.ip || window.location.hostname || '192.168.1.1';
-    }).catch(()=>{
-        routerIP = window.location.hostname || '192.168.1.1';
-    });
-}
+    function st(s) {
+        var map = {idle:'待执行', running:'运行中', success:'成功', failed:'失败', timeout:'超时', error:'错误', stopped:'已停止'};
+        return map[s] || s;
+    }
 
-// ========== 加载内存信息 ==========
-function loadMem(){
-    fetch('/api/meminfo').then(r=>r.json()).then(data=>{
-        var total = data.total_kb || 0;
-        var used = data.used_kb || 0;
-        var totalMB = (total/1024).toFixed(0);
-        var usedMB = (used/1024).toFixed(0);
-        var percent = data.percent || 0;
-        document.getElementById('memText').textContent = usedMB + '/' + totalMB + ' MB';
-        document.getElementById('memLabel').textContent = '💾 内存使用 ' + percent + '%';
-        var bar = document.getElementById('memBar');
-        bar.style.width = Math.min(percent, 100) + '%';
-        if (percent > 85) bar.style.background = '#f44336';
-        else if (percent > 70) bar.style.background = '#ff9800';
-        else bar.style.background = '#4caf50';
-    }).catch(()=>{});
-}
+    function badge(s) {
+        return '<span class="badge ' + s + '">' + st(s) + '</span>';
+    }
 
-// ========== 加载APK缓存大小 ==========
-function loadApkCache(){
-    fetch('/api/apk_cache_size').then(r=>r.json()).then(data=>{
-        var size = data.size_mb || 0;
-        document.getElementById('cacheSize').textContent = size.toFixed(1) + ' MB';
-    }).catch(()=>{
-        document.getElementById('cacheSize').textContent = '-- MB';
-    });
-}
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
+    }
 
-// ========== 加载脚本列表 ==========
-function loadScripts(){
-    fetch('/api/scripts').then(r=>r.json()).then(data=>{
-        var g=document.getElementById('grid');
-        if(!data||!data.length){
-            g.innerHTML='<div class="empty">📂 暂无脚本<br><small>点击 "新建"、"上传" 或 "同步" 添加脚本</small></div>';
-            updateStats(0,0,0,0);
-            return;
-        }
-        var rn=0,su=0,fa=0;
-        g.innerHTML=data.map(function(s){
-            var st=s.status||'idle';
-            if(st==='running')rn++;
-            if(st==='success')su++;
-            if(['failed','timeout','error'].includes(st))fa++;
-            var remarkHtml = s.remark ? '<div class="remark-line">'+s.remark+'</div>' : '';
-            var stopBtn = st==='running' ? '<button class="btn-stop" onclick="stop(\''+s.name+'\')">⏹ 停止</button>' : '';
-            return '<div class="card '+st+'">'+
-                '<div class="top"><span class="name">'+s.name+'</span>'+badge(st)+'</div>'+
-                remarkHtml+
-                '<div class="info"><span class="lbl">📏</span> '+(s.size/1024).toFixed(1)+'KB &nbsp; <span class="lbl">🕐</span> '+s.mtime+
-                '<br><span class="lbl">⏱</span> '+(s.last_run||'从未运行')+' &nbsp; <span class="lbl">📋</span> '+(s.history_count||0)+'次</div>'+
-                '<div class="actions">'+
-                '<button class="btn-run" onclick="run(\''+s.name+'\')" '+(st==='running'?'disabled':'')+'>▶ 运行</button>'+
-                stopBtn+
-                '<button class="btn-edit" onclick="showEdit(\''+s.name+'\')">✏️ 编辑</button>'+
-                '<button class="btn-del" onclick="del(\''+s.name+'\')">🗑 删除</button>'+
-                '<button class="btn-log" onclick="log(\''+s.name+'\')">📄 日志</button>'+
-                '</div></div>';
-        }).join('');
-        updateStats(data.length,rn,su,fa);
-    }).catch(function(err){});
-}
-
-function updateStats(total,rn,su,fa){
-    document.getElementById('total').textContent=total;
-    document.getElementById('running').textContent=rn;
-    document.getElementById('success').textContent=su;
-    document.getElementById('failed').textContent=fa;
-}
-
-function loadAll(){ loadScripts(); loadMem(); loadApkCache(); }
-
-// ========== 脚本操作 ==========
-function run(n){if(!confirm('确定执行 "'+n+'" ?'))return;fetch('/api/run/'+encodeURIComponent(n),{method:'POST'}).then(r=>r.json()).then(d=>{alert(d.message||d.error);loadAll();})}
-function stop(n){if(!confirm('确定停止 "'+n+'" 吗？'))return;fetch('/api/stop/'+encodeURIComponent(n),{method:'POST'}).then(r=>r.json()).then(d=>{alert(d.message||d.error);loadAll();})}
-function del(n){if(!confirm('确定删除 "'+n+'" 吗？'))return;fetch('/api/delete/'+encodeURIComponent(n),{method:'POST'}).then(r=>r.json()).then(d=>{alert(d.message||d.error);loadAll();})}
-
-function log(n){fetch('/api/log/'+encodeURIComponent(n)).then(r=>r.json()).then(d=>{document.getElementById('mTitle').textContent='📄 '+n;document.getElementById('mMeta').textContent='状态: '+st(d.status);document.getElementById('mContent').textContent=d.output||'暂无输出';document.getElementById('modal').classList.add('active')})}
-function closeModal(){document.getElementById('modal').classList.remove('active')}
-document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal()});
-
-// ========== 新建脚本 ==========
-function showNewModal(){document.getElementById('newModal').classList.add('active')}
-function closeNew(){document.getElementById('newModal').classList.remove('active')}
-function createScript(){
-    var name=document.getElementById('newName').value.trim();
-    var content=document.getElementById('newContent').value;
-    if(!name){alert('请输入文件名');return}
-    if(!content){alert('代码内容不能为空');return}
-    fetch('/api/new',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,content})})
-    .then(r=>r.json()).then(d=>{alert(d.message||d.error);if(d.message){closeNew();document.getElementById('newName').value='';document.getElementById('newContent').value='';loadAll()}})
-}
-
-// ========== 编辑脚本 ==========
-var editingName='';
-function showEdit(name){
-    editingName=name;
-    document.getElementById('editFileName').textContent='📄 '+name;
-    fetch('/api/get/'+encodeURIComponent(name)).then(r=>r.json()).then(d=>{
-        if(d.error){alert(d.error);return}
-        document.getElementById('editContent').value=d.content||'';
-        document.getElementById('editModal').classList.add('active');
-    }).catch(function(err){alert('获取脚本失败: '+err.message)})
-}
-function closeEdit(){document.getElementById('editModal').classList.remove('active');editingName=''}
-function saveEdit(){
-    var content=document.getElementById('editContent').value;
-    if(!content){alert('内容不能为空');return}
-    fetch('/api/edit/'+encodeURIComponent(editingName),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})})
-    .then(r=>r.json()).then(d=>{alert(d.message||d.error);if(d.message){closeEdit();loadAll()}})
-}
-
-// ========== 上传脚本 ==========
-function uploadFile(input){
-    if(!input.files.length)return;
-    var file=input.files[0];
-    var formData=new FormData();
-    formData.append('file',file);
-    fetch('/api/upload',{method:'POST',body:formData})
-    .then(r=>r.json()).then(d=>{alert(d.message||d.error);if(d.message)loadAll()});
-    input.value='';
-}
-
-// ========== 同步 ==========
-function showSyncModal(){
-    document.getElementById('syncModal').classList.add('active');
-    fetch('/api/sync_config').then(r=>r.json()).then(data=>{
-        document.getElementById('syncTongbukuang').value=data.tongbukuang||'';
-    })
-}
-function closeSync(){document.getElementById('syncModal').classList.remove('active')}
-function doSync(){
-    var val=document.getElementById('syncTongbukuang').value.trim();
-    if(!val){alert('请输入仓库地址');return}
-    if(!confirm('将从以下地址同步脚本:\\n'+val+'\\n确定吗？'))return;
-    fetch('/api/sync_github',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tongbukuang:val})})
-    .then(r=>r.json()).then(d=>{alert(d.message||d.error);if(d.message){closeSync();loadAll()}})
-}
-
-// ========== 垃圾回收 ==========
-function forceGC(){
-    if(!confirm('执行垃圾回收，可能会短暂卡顿，确定吗？'))return;
-    fetch('/api/gc',{method:'POST'}).then(r=>r.json()).then(d=>{alert(d.message);loadAll()})
-}
-
-// ========== Cron 管理 ==========
-function showCronModal(){
-    document.getElementById('cronModal').classList.add('active');
-    loadCronList();
-    loadScriptsForCronSelect();
-}
-function closeCron(){document.getElementById('cronModal').classList.remove('active')}
-
-function loadScriptsForCronSelect(){
-    fetch('/api/scripts').then(r=>r.json()).then(data=>{
-        var sel=document.getElementById('cronCommand');
-        sel.innerHTML='<option value="">-- 选择脚本 --</option>';
-        if(data && data.length){
-            data.forEach(function(s){
-                var opt=document.createElement('option');
-                opt.value='python3 /root/scripts/'+s.name;
-                opt.textContent=s.name;
-                sel.appendChild(opt);
-            });
-        }
-    }).catch(function(){});
-}
-
-function loadCronList(){
-    var container=document.getElementById('cronList');
-    container.innerHTML='<div class="cron-empty">加载中...</div>';
-    fetch('/api/cron_jobs').then(r=>r.json()).then(data=>{
-        if(!data || !data.length){
-            container.innerHTML='<div class="cron-empty">📭 暂无定时任务</div>';
-            return;
-        }
-        var html='';
-        data.forEach(function(job){
-            var label = job.is_script ? '📜' : '⚙️';
-            html += '<div class="cron-item">'+
-                '<span class="cron-sched">'+job.schedule+'</span>'+
-                '<span class="cron-cmd">'+label+' '+escapeHtml(job.command)+'</span>'+
-                '<div class="cron-actions"><button class="btn-danger" onclick="deleteCron(\''+escapeHtml(job.full_line)+'\')">🗑</button></div>'+
-                '</div>';
+    function fetchRouterIP() {
+        fetch('/api/router_ip').then(function(r) { return r.json(); }).then(function(data) {
+            routerIP = data.ip || window.location.hostname || '192.168.1.1';
+        }).catch(function() {
+            routerIP = window.location.hostname || '192.168.1.1';
         });
-        container.innerHTML=html;
-    }).catch(function(){
-        container.innerHTML='<div class="cron-empty">⚠️ 加载失败</div>';
-    });
-}
-
-function escapeHtml(str){
-    if(!str)return '';
-    return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');
-}
-
-function addCronJob(){
-    var schedule=document.getElementById('cronSchedule').value.trim();
-    var cmdSelect=document.getElementById('cronCommand').value;
-    var customCmd=document.getElementById('cronCustomCmd').value.trim();
-    var command = cmdSelect || customCmd;
-    if(!schedule){alert('请输入执行时间');return}
-    if(!command){alert('请选择脚本或输入自定义命令');return}
-    var parts=schedule.split(/\s+/);
-    if(parts.length!==5){
-        alert('Cron 格式错误，应为: 分 时 日 月 周\n例如: 0 */6 * * *');
-        return;
     }
-    fetch('/api/cron_add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({schedule:schedule,command:command})})
-    .then(r=>r.json()).then(d=>{
-        alert(d.message||d.error);
-        if(d.message){loadCronList();document.getElementById('cronCustomCmd').value='';}
-    }).catch(function(err){alert('请求失败: '+err.message)})
-}
 
-function deleteCron(fullLine){
-    if(!confirm('确定删除该定时任务吗？'))return;
-    fetch('/api/cron_delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({full_line:fullLine})})
-    .then(r=>r.json()).then(d=>{
-        alert(d.message||d.error);
-        if(d.message){loadCronList();}
-    }).catch(function(err){alert('删除失败: '+err.message)})
-}
+    function loadMem() {
+        fetch('/api/meminfo').then(function(r) { return r.json(); }).then(function(data) {
+            var total = data.total_kb || 0;
+            var used = data.used_kb || 0;
+            var totalMB = (total/1024).toFixed(0);
+            var usedMB = (used/1024).toFixed(0);
+            var percent = data.percent || 0;
+            document.getElementById('memText').textContent = usedMB + '/' + totalMB + ' MB';
+            document.getElementById('memLabel').textContent = '💾 内存使用 ' + percent + '%';
+            var bar = document.getElementById('memBar');
+            bar.style.width = Math.min(percent, 100) + '%';
+            if (percent > 85) bar.style.background = '#f44336';
+            else if (percent > 70) bar.style.background = '#ff9800';
+            else bar.style.background = '#4caf50';
+        }).catch(function() {});
+    }
 
-// ========== 清理高内存进程 ==========
-function killTopProcess(){
-    if(!confirm('🔪 将查找占用内存最高的进程并杀掉\n→ 自动清理系统缓存\n→ 自动触发内存回收\n如果是面板管理的脚本则自动重启\n确定执行吗？'))return;
-    var btn=document.getElementById('killBtn');
-    btn.disabled=true;
-    btn.textContent='⏳ 执行中...';
-    fetch('/api/kill_top_process',{method:'POST'})
-    .then(r=>r.json()).then(d=>{
-        if(d.error){alert('❌ '+d.error)}
-        else{alert(d.message||'执行完成')}
-        loadAll();
-        btn.disabled=false;
-        btn.textContent='💣 清理进程';
-    }).catch(function(err){
-        alert('❌ 执行失败: '+err.message);
-        btn.disabled=false;
-        btn.textContent='💣 清理进程';
-    })
-}
+    function loadApkCache() {
+        fetch('/api/apk_cache_size').then(function(r) { return r.json(); }).then(function(data) {
+            var size = data.size_mb || 0;
+            document.getElementById('cacheSize').textContent = size.toFixed(1) + ' MB';
+        }).catch(function() {
+            document.getElementById('cacheSize').textContent = '-- MB';
+        });
+    }
 
-// ========== APK 缓存清理 ==========
-function cleanApkCache(){
-    if(!confirm('🧹 将清理 apk 下载缓存（/var/cache/apk/）\n确定执行吗？'))return;
-    var btn = document.querySelector('.btn-cache');
-    var origText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '⏳ 清理中...';
-    fetch('/api/apk_clean_cache',{method:'POST'})
-    .then(r=>r.json()).then(d=>{
-        alert(d.message || d.error || '执行完成');
-        loadApkCache();
+    function loadScripts() {
+        fetch('/api/scripts').then(function(r) { return r.json(); }).then(function(data) {
+            var g = document.getElementById('grid');
+            if (!data || !data.length) {
+                g.innerHTML = '<div class="empty">📂 暂无脚本<br><small>点击 "新建"、"上传" 或 "同步" 添加脚本</small></div>';
+                updateStats(0, 0, 0, 0);
+                return;
+            }
+            var rn = 0, su = 0, fa = 0;
+            var html = '';
+            data.forEach(function(s) {
+                var status = s.status || 'idle';
+                if (status === 'running') rn++;
+                if (status === 'success') su++;
+                if (['failed','timeout','error'].indexOf(status) !== -1) fa++;
+                var remarkHtml = s.remark ? '<div class="remark-line">' + s.remark + '</div>' : '';
+                var stopBtn = status === 'running' ? '<button class="btn-stop" data-name="' + s.name + '">⏹ 停止</button>' : '';
+                html += '<div class="card ' + status + '">' +
+                    '<div class="top"><span class="name">' + s.name + '</span>' + badge(status) + '</div>' +
+                    remarkHtml +
+                    '<div class="info"><span class="lbl">📏</span> ' + (s.size/1024).toFixed(1) + 'KB &nbsp; <span class="lbl">🕐</span> ' + s.mtime +
+                    '<br><span class="lbl">⏱</span> ' + (s.last_run || '从未运行') + ' &nbsp; <span class="lbl">📋</span> ' + (s.history_count || 0) + '次</div>' +
+                    '<div class="actions">' +
+                    '<button class="btn-run" data-name="' + s.name + '" ' + (status === 'running' ? 'disabled' : '') + '>▶ 运行</button>' +
+                    stopBtn +
+                    '<button class="btn-edit" data-name="' + s.name + '">✏️ 编辑</button>' +
+                    '<button class="btn-del" data-name="' + s.name + '">🗑 删除</button>' +
+                    '<button class="btn-log" data-name="' + s.name + '">📄 日志</button>' +
+                    '</div></div>';
+            });
+            g.innerHTML = html;
+            updateStats(data.length, rn, su, fa);
+            bindCardEvents();
+        }).catch(function() {});
+    }
+
+    function updateStats(total, rn, su, fa) {
+        document.getElementById('total').textContent = total;
+        document.getElementById('running').textContent = rn;
+        document.getElementById('success').textContent = su;
+        document.getElementById('failed').textContent = fa;
+    }
+
+    function loadAll() {
+        loadScripts();
         loadMem();
-        btn.disabled = false;
-        btn.textContent = origText;
-    }).catch(function(err){
-        alert('❌ 清理失败: '+err.message);
-        btn.disabled = false;
-        btn.textContent = origText;
-    })
-}
-
-// ========== 重启路由器 ==========
-function rebootRouter(){
-    if(!confirm('⚠️ 确定要重启路由器吗？\n面板将断开连接！'))return;
-    if(!confirm('⚠️ 再次确认：重启路由器？'))return;
-    alert('🔄 路由器正在重启，请稍后重新访问...');
-    fetch('/api/restart_router',{method:'POST'}).then(r=>r.json()).then(d=>{});
-}
-
-// ========== 进入后台 ==========
-function goLuci(){
-    if(routerIP){
-        window.open('http://'+routerIP+'/cgi-bin/luci', '_blank');
-    }else{
-        window.open('/cgi-bin/luci', '_blank');
+        loadApkCache();
     }
-}
 
-function go9090(){
-    if(routerIP){
-        window.open('http://'+routerIP+':9090/ui', '_blank');
-    }else{
-        window.open('http://192.168.1.1:9090/ui', '_blank');
+    function bindCardEvents() {
+        document.querySelectorAll('.btn-run').forEach(function(btn) {
+            btn.removeEventListener('click', runHandler);
+            btn.addEventListener('click', runHandler);
+        });
+        document.querySelectorAll('.btn-stop').forEach(function(btn) {
+            btn.removeEventListener('click', stopHandler);
+            btn.addEventListener('click', stopHandler);
+        });
+        document.querySelectorAll('.btn-edit').forEach(function(btn) {
+            btn.removeEventListener('click', editHandler);
+            btn.addEventListener('click', editHandler);
+        });
+        document.querySelectorAll('.btn-del').forEach(function(btn) {
+            btn.removeEventListener('click', delHandler);
+            btn.addEventListener('click', delHandler);
+        });
+        document.querySelectorAll('.btn-log').forEach(function(btn) {
+            btn.removeEventListener('click', logHandler);
+            btn.addEventListener('click', logHandler);
+        });
     }
-}
 
-// ========== 启动 ==========
-fetchRouterIP();
-loadAll();
-setInterval(loadAll, 10000);
+    function runHandler(e) {
+        var name = e.target.getAttribute('data-name');
+        if (!confirm('确定执行 "' + name + '" 吗？')) return;
+        fetch('/api/run/' + encodeURIComponent(name), {method: 'POST'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) { alert(d.message || d.error); loadAll(); })
+            .catch(function() {});
+    }
+
+    function stopHandler(e) {
+        var name = e.target.getAttribute('data-name');
+        if (!confirm('确定停止 "' + name + '" 吗？')) return;
+        fetch('/api/stop/' + encodeURIComponent(name), {method: 'POST'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) { alert(d.message || d.error); loadAll(); })
+            .catch(function() {});
+    }
+
+    function editHandler(e) {
+        var name = e.target.getAttribute('data-name');
+        showEditModal(name);
+    }
+
+    function delHandler(e) {
+        var name = e.target.getAttribute('data-name');
+        if (!confirm('确定删除 "' + name + '" 吗？')) return;
+        fetch('/api/delete/' + encodeURIComponent(name), {method: 'POST'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) { alert(d.message || d.error); loadAll(); })
+            .catch(function() {});
+    }
+
+    function logHandler(e) {
+        var name = e.target.getAttribute('data-name');
+        fetch('/api/log/' + encodeURIComponent(name))
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                document.getElementById('logTitle').textContent = '📄 ' + name;
+                document.getElementById('logMeta').textContent = '状态: ' + st(d.status);
+                document.getElementById('logContent').textContent = d.output || '暂无输出';
+                document.getElementById('logModal').classList.add('active');
+            })
+            .catch(function() {});
+    }
+
+    function openModal(id) { document.getElementById(id).classList.add('active'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    // 新建脚本
+    function showNewModal() { openModal('newModal'); }
+    function closeNewModal() { closeModal('newModal'); }
+    function createScript() {
+        var name = document.getElementById('newName').value.trim();
+        var content = document.getElementById('newContent').value;
+        if (!name) { alert('请输入文件名'); return; }
+        if (!content) { alert('代码内容不能为空'); return; }
+        fetch('/api/new', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name, content: content})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            alert(d.message || d.error);
+            if (d.message) {
+                closeNewModal();
+                document.getElementById('newName').value = '';
+                document.getElementById('newContent').value = '';
+                loadAll();
+            }
+        })
+        .catch(function() {});
+    }
+
+    // 编辑脚本
+    var editingName = '';
+    function showEditModal(name) {
+        editingName = name;
+        document.getElementById('editFileName').textContent = '📄 ' + name;
+        fetch('/api/get/' + encodeURIComponent(name))
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.error) { alert(d.error); return; }
+                document.getElementById('editContent').value = d.content || '';
+                openModal('editModal');
+            })
+            .catch(function() { alert('获取脚本失败'); });
+    }
+    function closeEditModal() { closeModal('editModal'); editingName = ''; }
+    function saveEdit() {
+        var content = document.getElementById('editContent').value;
+        if (!content) { alert('内容不能为空'); return; }
+        fetch('/api/edit/' + encodeURIComponent(editingName), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({content: content})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            alert(d.message || d.error);
+            if (d.message) { closeEditModal(); loadAll(); }
+        })
+        .catch(function() {});
+    }
+
+    // 上传
+    function uploadFile() {
+        var input = document.getElementById('fileInput');
+        if (!input.files.length) return;
+        var file = input.files[0];
+        var formData = new FormData();
+        formData.append('file', file);
+        fetch('/api/upload', {method: 'POST', body: formData})
+            .then(function(r) { return r.json(); })
+            .then(function(d) { alert(d.message || d.error); if (d.message) loadAll(); })
+            .catch(function() {});
+        input.value = '';
+    }
+
+    // 同步
+    function showSyncModal() {
+        openModal('syncModal');
+        fetch('/api/sync_config')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                document.getElementById('syncTongbukuang').value = data.tongbukuang || '';
+            })
+            .catch(function() {});
+    }
+    function closeSyncModal() { closeModal('syncModal'); }
+    function doSync() {
+        var val = document.getElementById('syncTongbukuang').value.trim();
+        if (!val) { alert('请输入仓库地址'); return; }
+        if (!confirm('将从以下地址同步脚本:\n' + val + '\n确定吗？')) return;
+        fetch('/api/sync_github', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({tongbukuang: val})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            alert(d.message || d.error);
+            if (d.message) { closeSyncModal(); loadAll(); }
+        })
+        .catch(function() {});
+    }
+
+    // GC
+    function forceGC() {
+        if (!confirm('执行垃圾回收，可能会短暂卡顿，确定吗？')) return;
+        fetch('/api/gc', {method: 'POST'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) { alert(d.message); loadAll(); })
+            .catch(function() {});
+    }
+
+    // Cron
+    function showCronModal() {
+        openModal('cronModal');
+        loadCronList();
+        loadScriptsForCronSelect();
+    }
+    function closeCronModal() { closeModal('cronModal'); }
+
+    function loadScriptsForCronSelect() {
+        fetch('/api/scripts')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var sel = document.getElementById('cronCommand');
+                sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
+                if (data && data.length) {
+                    data.forEach(function(s) {
+                        var opt = document.createElement('option');
+                        opt.value = 'python3 /root/scripts/' + s.name;
+                        opt.textContent = s.name;
+                        sel.appendChild(opt);
+                    });
+                }
+            })
+            .catch(function() {});
+    }
+
+    function loadCronList() {
+        var container = document.getElementById('cronList');
+        container.innerHTML = '<div class="cron-empty">加载中...</div>';
+        fetch('/api/cron_jobs')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data || !data.length) {
+                    container.innerHTML = '<div class="cron-empty">📭 暂无定时任务</div>';
+                    return;
+                }
+                var html = '';
+                data.forEach(function(job) {
+                    var label = job.is_script ? '📜' : '⚙️';
+                    html += '<div class="cron-item">' +
+                        '<span class="cron-sched">' + job.schedule + '</span>' +
+                        '<span class="cron-cmd">' + label + ' ' + escapeHtml(job.command) + '</span>' +
+                        '<div class="cron-actions"><button class="btn-danger" data-line="' + escapeHtml(job.full_line) + '">🗑</button></div>' +
+                        '</div>';
+                });
+                container.innerHTML = html;
+                container.querySelectorAll('.cron-actions .btn-danger').forEach(function(btn) {
+                    btn.removeEventListener('click', deleteCronHandler);
+                    btn.addEventListener('click', deleteCronHandler);
+                });
+            })
+            .catch(function() {
+                container.innerHTML = '<div class="cron-empty">⚠️ 加载失败</div>';
+            });
+    }
+
+    function deleteCronHandler(e) {
+        var fullLine = e.target.getAttribute('data-line');
+        if (!confirm('确定删除该定时任务吗？')) return;
+        fetch('/api/cron_delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({full_line: fullLine})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            alert(d.message || d.error);
+            if (d.message) loadCronList();
+        })
+        .catch(function() { alert('删除失败'); });
+    }
+
+    function addCronJob() {
+        var schedule = document.getElementById('cronSchedule').value.trim();
+        var cmdSelect = document.getElementById('cronCommand').value;
+        var customCmd = document.getElementById('cronCustomCmd').value.trim();
+        var command = cmdSelect || customCmd;
+        if (!schedule) { alert('请输入执行时间'); return; }
+        if (!command) { alert('请选择脚本或输入自定义命令'); return; }
+        var parts = schedule.split(/\s+/);
+        if (parts.length !== 5) {
+            alert('Cron 格式错误，应为: 分 时 日 月 周\n例如: 0 */6 * * *');
+            return;
+        }
+        fetch('/api/cron_add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({schedule: schedule, command: command})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            alert(d.message || d.error);
+            if (d.message) { loadCronList(); document.getElementById('cronCustomCmd').value = ''; }
+        })
+        .catch(function() { alert('请求失败'); });
+    }
+
+    // 清理进程
+    function killTopProcess() {
+        if (!confirm('🔪 将查找占用内存最高的进程并杀掉\n→ 自动清理系统缓存\n→ 自动触发内存回收\n如果是面板管理的脚本则自动重启\n确定执行吗？')) return;
+        var btn = document.getElementById('btnKill');
+        btn.disabled = true;
+        btn.textContent = '⏳ 执行中...';
+        fetch('/api/kill_top_process', {method: 'POST'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.error) { alert('❌ ' + d.error); }
+                else { alert(d.message || '执行完成'); }
+                loadAll();
+                btn.disabled = false;
+                btn.textContent = '💣 清理进程';
+            })
+            .catch(function() {
+                alert('❌ 执行失败');
+                btn.disabled = false;
+                btn.textContent = '💣 清理进程';
+            });
+    }
+
+    // APK缓存清理
+    function cleanApkCache() {
+        if (!confirm('🧹 将清理 apk 下载缓存（/var/cache/apk/）\n确定执行吗？')) return;
+        var btn = document.getElementById('btnCache');
+        var origText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '⏳ 清理中...';
+        fetch('/api/apk_clean_cache', {method: 'POST'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                alert(d.message || d.error || '执行完成');
+                loadApkCache();
+                loadMem();
+                btn.disabled = false;
+                btn.textContent = origText;
+            })
+            .catch(function() {
+                alert('❌ 清理失败');
+                btn.disabled = false;
+                btn.textContent = origText;
+            });
+    }
+
+    // 重启路由器
+    function rebootRouter() {
+        if (!confirm('⚠️ 确定要重启路由器吗？\n面板将断开连接！')) return;
+        if (!confirm('⚠️ 再次确认：重启路由器？')) return;
+        alert('🔄 路由器正在重启，请稍后重新访问...');
+        fetch('/api/restart_router', {method: 'POST'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) {});
+    }
+
+    // 跳转
+    function goLuci() {
+        if (routerIP) {
+            window.open('http://' + routerIP + '/cgi-bin/luci', '_blank');
+        } else {
+            window.open('/cgi-bin/luci', '_blank');
+        }
+    }
+
+    function go9090() {
+        if (routerIP) {
+            window.open('http://' + routerIP + ':9090/ui', '_blank');
+        } else {
+            window.open('http://192.168.1.1:9090/ui', '_blank');
+        }
+    }
+
+    // ========== 绑定按钮事件 ==========
+    function bindTopButtons() {
+        document.getElementById('refreshBtn').addEventListener('click', loadAll);
+        document.getElementById('btnNew').addEventListener('click', showNewModal);
+        document.getElementById('btnUpload').addEventListener('click', function() { document.getElementById('fileInput').click(); });
+        document.getElementById('btnSync').addEventListener('click', showSyncModal);
+        document.getElementById('btnGc').addEventListener('click', forceGC);
+        document.getElementById('btnCron').addEventListener('click', showCronModal);
+        document.getElementById('btnLuci').addEventListener('click', goLuci);
+        document.getElementById('btn9090').addEventListener('click', go9090);
+        document.getElementById('btnReboot').addEventListener('click', rebootRouter);
+        document.getElementById('btnKill').addEventListener('click', killTopProcess);
+        document.getElementById('btnCache').addEventListener('click', cleanApkCache);
+
+        document.getElementById('fileInput').addEventListener('change', uploadFile);
+
+        document.getElementById('saveNew').addEventListener('click', createScript);
+        document.getElementById('cancelNew').addEventListener('click', closeNewModal);
+        document.getElementById('closeNew').addEventListener('click', closeNewModal);
+
+        document.getElementById('saveEditBtn').addEventListener('click', saveEdit);
+        document.getElementById('cancelEdit').addEventListener('click', closeEditModal);
+        document.getElementById('closeEdit').addEventListener('click', closeEditModal);
+
+        document.getElementById('doSyncBtn').addEventListener('click', doSync);
+        document.getElementById('cancelSync').addEventListener('click', closeSyncModal);
+        document.getElementById('closeSync').addEventListener('click', closeSyncModal);
+
+        document.getElementById('addCronBtn').addEventListener('click', addCronJob);
+        document.getElementById('closeCronBtn').addEventListener('click', closeCronModal);
+        document.getElementById('closeCron').addEventListener('click', closeCronModal);
+
+        document.getElementById('closeLog').addEventListener('click', function() { closeModal('logModal'); });
+        document.getElementById('logModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal('logModal');
+        });
+
+        ['newModal','editModal','syncModal','cronModal'].forEach(function(id) {
+            document.getElementById(id).addEventListener('click', function(e) {
+                if (e.target === this) closeModal(id);
+            });
+        });
+    }
+
+    // ========== 启动 ==========
+    fetchRouterIP();
+    loadAll();
+    setInterval(loadAll, 10000);
+    bindTopButtons();
+
+})();
 </script>
 </body>
 </html>
