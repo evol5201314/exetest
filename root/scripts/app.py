@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-beizhu = "📈 面板完整版（所有弹窗动态加载，HTML 从 tools 目录加载）"
+beizhu = "📈 面板完整版（所有弹窗动态加载，一个HTML包含全部）"
 
 import os, sys, json, subprocess, threading, signal, gc
 from datetime import datetime
@@ -428,7 +428,7 @@ select{appearance:auto;background:#fff}
 
 <script>
 var routerIP = '';
-var modalLoaded = {};
+var modalLoaded = false;
 
 function st(s){var map={idle:'待执行',running:'运行中',success:'成功',failed:'失败',timeout:'超时',error:'错误',stopped:'已停止'};return map[s]||s}
 function badge(s){return'<span class="badge '+s+'">'+st(s)+'</span>'}
@@ -505,42 +505,55 @@ function doRunTool(script, args, label) {
 
 function runSimpleTool(script, label){ doRunTool(script, [], label) }
 
-// ========== 通用弹窗加载器 ==========
-function loadModal(name, url, initFn) {
+// ========== 通用弹窗加载器（一个HTML包含所有弹窗） ==========
+function loadModal(name) {
     var container = document.getElementById('modalContainer');
-    if (modalLoaded[name] && container.innerHTML.indexOf('id="'+name+'"') !== -1) {
-        var el = document.getElementById(name);
-        if (el) { el.style.display = 'flex'; }
-        if (typeof initFn === 'function') { initFn(); }
+    if (modalLoaded) {
+        document.querySelectorAll('#modalContainer .modal').forEach(function(el) {
+            el.style.display = 'none';
+        });
+        var target = document.getElementById(name);
+        if (target) {
+            target.style.display = 'flex';
+            if (name === 'editModal') populateEditSelect();
+            if (name === 'delModal') populateDelSelect();
+            if (name === 'logModal') populateLogSelect();
+            if (name === 'cronModal') { loadScriptsForCron(); cronRefreshList(); }
+        }
         return;
     }
-    fetch(url)
+    fetch('/static/modal_content.html')
         .then(r => r.text())
         .then(html => {
             container.innerHTML = html;
-            modalLoaded[name] = true;
-            if (typeof initFn === 'function') { initFn(); }
+            modalLoaded = true;
+            document.querySelectorAll('#modalContainer .modal').forEach(function(el) {
+                el.style.display = 'none';
+            });
+            var target = document.getElementById(name);
+            if (target) {
+                target.style.display = 'flex';
+                if (name === 'editModal') populateEditSelect();
+                if (name === 'delModal') populateDelSelect();
+                if (name === 'logModal') populateLogSelect();
+                if (name === 'cronModal') { loadScriptsForCron(); cronRefreshList(); }
+            }
         })
-        .catch(e => { alert('加载 '+name+' 模块失败: '+e.message); });
+        .catch(e => { alert('加载模块失败: '+e.message); });
 }
 
 function closeModalByName(name) {
     var el = document.getElementById(name);
     if (el) {
         el.style.display = 'none';
-        // 移除 DOM 释放内存
         var container = document.getElementById('modalContainer');
         container.innerHTML = '';
-        modalLoaded = {};
+        modalLoaded = false;
     }
 }
 
 // ========== 新建脚本 ==========
-document.getElementById('btnNew').onclick = function() {
-    loadModal('newModal', '/static/new_content.html', function() {
-        // 初始化弹窗
-    });
-};
+document.getElementById('btnNew').onclick = function() { loadModal('newModal'); };
 
 function createScript() {
     var name = document.getElementById('newName').value.trim();
@@ -552,11 +565,7 @@ function createScript() {
 }
 
 // ========== 编辑脚本 ==========
-document.getElementById('btnEdit').onclick = function() {
-    loadModal('editModal', '/static/edit_content.html', function() {
-        populateEditSelect();
-    });
-};
+document.getElementById('btnEdit').onclick = function() { loadModal('editModal'); };
 
 function populateEditSelect() {
     fetch('/api/scripts').then(r=>r.json()).then(d=>{
@@ -584,11 +593,7 @@ function saveEdit(){
 }
 
 // ========== 删除脚本 ==========
-document.getElementById('btnDel').onclick = function() {
-    loadModal('delModal', '/static/del_content.html', function() {
-        populateDelSelect();
-    });
-};
+document.getElementById('btnDel').onclick = function() { loadModal('delModal'); };
 
 function populateDelSelect() {
     fetch('/api/scripts').then(r=>r.json()).then(d=>{
@@ -607,11 +612,7 @@ function deleteScript(){
 }
 
 // ========== 查看日志 ==========
-document.getElementById('btnLog').onclick = function() {
-    loadModal('logModal', '/static/log_content.html', function() {
-        populateLogSelect();
-    });
-};
+document.getElementById('btnLog').onclick = function() { loadModal('logModal'); };
 
 function populateLogSelect() {
     fetch('/api/scripts').then(r=>r.json()).then(d=>{
@@ -659,13 +660,37 @@ fileInput.style.display='none';
 fileInput.onchange=uploadFile;
 document.body.appendChild(fileInput);
 
-// ========== 定时任务 ==========
-document.getElementById('btnCron').onclick = function() {
-    loadModal('cronModal', '/static/cron_content.html', function() {
-        loadScriptsForCron();
-        cronRefreshList();
+// ========== 同步 ==========
+document.getElementById('btnSync').onclick = function() { loadModal('syncModal'); };
+
+function doSync() {
+    var repo = document.getElementById('syncRepoInput').value.trim();
+    if (!repo) {
+        alert('请输入仓库地址');
+        return;
+    }
+    var output = document.getElementById('syncOutput');
+    output.style.display = 'block';
+    output.textContent = '⏳ 同步中...';
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({script: 'sync_github.py', args: ['--repo', repo]})
+    })
+    .then(r => r.json())
+    .then(d => {
+        output.textContent = d.output || '执行完成';
+        if (d.output && d.output.indexOf('✅') !== -1) {
+            loadAll();
+        }
+    })
+    .catch(e => {
+        output.textContent = '❌ 同步失败: ' + e.message;
     });
-};
+}
+
+// ========== 定时任务 ==========
+document.getElementById('btnCron').onclick = function() { loadModal('cronModal'); };
 
 function loadScriptsForCron() {
     fetch('/api/scripts').then(r=>r.json()).then(d=>{
@@ -739,7 +764,7 @@ document.getElementById('refreshBtn').onclick=loadAll
 document.getElementById('btnLuci').onclick=goLuci
 document.getElementById('btn9090').onclick=go9090
 document.getElementById('btnReboot').onclick=rebootRouter
-document.getElementById('btnSync').onclick=function(){runSimpleTool('sync_github.py','📥 同步GitHub')}
+document.getElementById('btnSync').onclick=function(){loadModal('syncModal')}
 document.getElementById('btnGc').onclick=function(){runSimpleTool('gc_force.py','🧹 GC')}
 document.getElementById('btnKill').onclick=function(){runSimpleTool('kill_top_process.py','💣 清理')}
 document.getElementById('btnCache').onclick=function(){runSimpleTool('clean_apk_cache.py','🧹 缓存')}
