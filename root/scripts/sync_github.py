@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-beizhu = "📈 独立版：一键同步 GitHub 仓库（镜像同步 /root/scripts/）"
+beizhu = "📈 独立版：一键同步 GitHub 仓库（镜像同步 /root/scripts/，支持 .py 和 .html）"
 
 """
 ===== 【OpenWrt 低内存专用优化说明 请勿删除以下轻量化逻辑】 =====
@@ -16,10 +16,11 @@ beizhu = "📈 独立版：一键同步 GitHub 仓库（镜像同步 /root/scrip
 ================================================================
 
 【功能】
-  从 GitHub 仓库同步 .py 文件到路由器
+  从 GitHub 仓库同步文件到路由器
   完全镜像仓库结构：
     - 仓库 /root/scripts/ 子目录 → /root/scripts/
     - 仓库 /root/scripts/tools/ 子目录 → /root/scripts/tools/
+  支持文件类型：.py 和 .html
 
 【依赖】
   ✅ Python 3 (python3-light 即可)
@@ -58,6 +59,9 @@ if ENV_REPO:
 # - 如果文件在仓库根目录 → SUB_PATH = ""
 # - 如果文件在 root/scripts/ 下 → SUB_PATH = "root/scripts"
 SUB_PATH = "root/scripts"
+
+# 支持的文件扩展名
+SUPPORTED_EXTS = ('.py', '.html')
 
 # ==========================================
 
@@ -133,13 +137,14 @@ def sync_dir(repo_url, target_dir, sub_path=""):
     if not isinstance(files, list):
         return False, "响应格式异常"
 
-    py_files = [f for f in files if f.get("name", "").endswith(".py") and f.get("type") == "file"]
-    if not py_files:
-        return True, "无 .py 文件"
+    # 支持 .py 和 .html 文件
+    target_files = [f for f in files if f.get("name", "").endswith(SUPPORTED_EXTS) and f.get("type") == "file"]
+    if not target_files:
+        return True, "无 .py 或 .html 文件"
 
     os.makedirs(target_dir, exist_ok=True)
     downloaded = 0
-    for f in py_files:
+    for f in target_files:
         name = f["name"]
         download_url = f.get("download_url")
         if not download_url:
@@ -166,6 +171,7 @@ if __name__ == "__main__":
 
     print("========================================")
     print("🐍 GitHub 独立同步工具 (镜像同步)")
+    print(f"支持文件: {', '.join(SUPPORTED_EXTS)}")
     print("========================================")
 
     ok1, msg1 = sync_dir(repo, "/root/scripts", SUB_PATH)
