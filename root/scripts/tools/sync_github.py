@@ -1,19 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-beizhu = "📥 同步 GitHub 仓库（镜像 /root/scripts/ 结构）"
+beizhu = "📥 面板同步工具（带输入框）"
 
 import os, sys, json, urllib.request, urllib.error
 
-DEBUG = False
-
-CONFIG = {
-    "repo_url": "https://github.com/evol5201314/exetest",
-    "branch": "main",
-}
-
-def log(msg):
-    if DEBUG:
-        print(msg)
+# 仓库子目录（根据实际结构调整）
+SUB_PATH = "root/scripts"
 
 def parse_github_url(raw_url):
     raw = raw_url.strip()
@@ -51,8 +43,7 @@ def fetch_api(url, token=None):
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return resp.read().decode("utf-8")
-    except Exception as e:
-        log(f"请求失败: {e}")
+    except Exception:
         return None
 
 def sync_dir(repo_url, target_dir, sub_path=""):
@@ -64,7 +55,6 @@ def sync_dir(repo_url, target_dir, sub_path=""):
         api_url = f"https://api.github.com/repos/{username}/{repo}/contents/{sub_path}?ref={branch}"
     else:
         api_url = f"https://api.github.com/repos/{username}/{repo}/contents?ref={branch}"
-    log(f"📡 请求: {api_url}")
     resp = fetch_api(api_url, token)
     if resp is None:
         return False, "API请求失败"
@@ -96,24 +86,28 @@ def sync_dir(repo_url, target_dir, sub_path=""):
                 with open(path, "w", encoding="utf-8") as out:
                     out.write(content)
                 downloaded += 1
-                log(f"  ✅ {name}")
-        except Exception as e:
-            log(f"  ❌ {name}: {e}")
+        except Exception:
+            pass
     return True, f"下载 {downloaded} 个文件"
 
 if __name__ == "__main__":
-    repo = CONFIG.get("repo_url")
+    # ========== 面板版本：从命令行参数读取仓库地址 ==========
+    repo = None
+    if len(sys.argv) >= 2:
+        repo = sys.argv[1].strip()
     if not repo:
-        print("❌ 未设置仓库地址")
+        print("❌ 未指定仓库地址")
+        print("用法: python3 sync_github.py <仓库地址>")
+        print("示例: python3 sync_github.py https://github.com/evol5201314/exetest")
         sys.exit(1)
     print("========================================")
-    print("🐍 GitHub 同步工具 (镜像同步)")
+    print("🐍 GitHub 同步工具")
+    print(f"🔗 {repo}")
     print("========================================")
-    # 仓库 root/scripts/ → /root/scripts/
-    ok1, msg1 = sync_dir(repo, "/root/scripts", "root/scripts")
+    ok1, msg1 = sync_dir(repo, "/root/scripts", SUB_PATH)
     print(f"📁 /root/scripts/: {msg1}")
-    # 仓库 root/scripts/tools/ → /root/scripts/tools/
-    ok2, msg2 = sync_dir(repo, "/root/scripts/tools", "root/scripts/tools")
+    tools_sub = f"{SUB_PATH}/tools" if SUB_PATH else "tools"
+    ok2, msg2 = sync_dir(repo, "/root/scripts/tools", tools_sub)
     print(f"📁 /root/scripts/tools/: {msg2}")
     print("========================================")
     sys.exit(0 if ok1 and ok2 else 1)
