@@ -36,7 +36,7 @@ HISTORY_FILE = "/tmp/script_history.json"
 CRONTAB_FILE = "/etc/crontabs/root"
 
 # ========== 同步框默认内容 ==========
-tongbukuang = ""
+tongbukuang = "https://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@github.com/evol5201314/exetest"
 
 def init_files():
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
