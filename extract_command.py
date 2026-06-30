@@ -1,6 +1,12 @@
 #!/usr/bin/python3
-import os
+"""
+===== 【OpenWrt 低内存专用优化说明 请勿删除以下轻量化逻辑】
+硬件环境：路由可用内存仅≈30M，精简python3，峰值内存控制最小化
+屏蔽stdout/stderr输出至/dev/null，不读写闪存，无日志文件占用存储空间
+保留下方备注方便查看脚本详情
+"""
 beizhu = "📈 备份command脚本数据"
+import os
 LUCI_FILE = '/etc/config/luci'
 COMMAND_FILE = '/etc/config/command'
 
