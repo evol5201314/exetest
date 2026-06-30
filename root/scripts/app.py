@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-beizhu = "📈 面板轻量版 (UI + 调用独立脚本)"
+beizhu = "📈 面板轻量版 (所有操作调用独立脚本)"
 
 import os, sys, json, subprocess, threading, signal, gc
 from datetime import datetime
@@ -132,7 +132,7 @@ def api_apk_cache_size():
 def api_router_ip():
     return jsonify({'ip': get_router_ip()})
 
-# ========== 运行/停止（常驻） ==========
+# ========== 运行脚本（常驻） ==========
 @app.route('/api/run/<name>', methods=['POST'])
 def run_script(name):
     path = os.path.join(SCRIPTS_DIR, name)
@@ -193,32 +193,6 @@ def run_script(name):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/stop/<name>', methods=['POST'])
-def stop_script(name):
-    with open(STATUS_FILE, 'r') as f:
-        status_data = json.load(f)
-    entry = status_data.get(name)
-    if not entry:
-        return jsonify({'error': '脚本不存在'}), 404
-    pid = entry.get('pid')
-    killed = False
-    if pid:
-        try:
-            os.kill(pid, 0)
-            os.kill(pid, signal.SIGKILL)
-            killed = True
-        except OSError:
-            pass
-    entry['status'] = 'stopped' if killed else 'idle'
-    entry['pid'] = None
-    entry['last_output'] = f'已手动停止{" (PID: "+str(pid)+")" if pid else ""}'
-    with open(STATUS_FILE, 'w') as f:
-        json.dump(status_data, f)
-    if killed:
-        return jsonify({'message': f'✅ {name} 已停止 (PID: {pid})'})
-    else:
-        return jsonify({'message': f'ℹ️ {name} 状态已重置'})
-
 # ========== 统一工具调用（支持参数传递） ==========
 @app.route('/api/run_tool', methods=['POST'])
 def run_tool():
@@ -252,7 +226,7 @@ def restart_router():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ==================== HTML 模板（含模态框，收集用户输入） ====================
+# ==================== HTML 模板 ====================
 HTML = r'''
 <!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>🐍 脚本面板</title>
@@ -311,7 +285,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .card .actions button{padding:5px 14px;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500}
 .btn-run{background:#667eea;color:#fff}.btn-run:hover{background:#5a6fd6}
 .btn-run:disabled{opacity:.5;cursor:not-allowed}
-.btn-stop{background:#f44336;color:#fff}.btn-stop:hover{background:#d32f2f}
+.btn-stop{background:#f44336;color:#fff;display:none}.btn-stop:hover{background:#d32f2f}
 .empty{padding:60px 20px;text-align:center;color:#999}
 .refresh-btn{background:#fff;border:1px solid #ddd;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:13px}
 .refresh-btn:hover{background:#f5f5f5}
@@ -414,6 +388,31 @@ select{appearance:auto;background:#fff}
 <pre id="logContent" style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;font-size:12px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all">请选择脚本</pre>
 </div></div>
 
+<!-- 定时任务管理弹窗 -->
+<div class="modal" id="cronModal"><div class="modal-box">
+<span class="close" onclick="closeModal('cronModal')">&times;</span>
+<h2>⏰ 定时任务管理</h2>
+<div style="margin:12px 0">
+<button class="btn-primary" onclick="cronList()">📋 查看任务列表</button>
+</div>
+<div style="margin:12px 0;border-top:1px solid #eee;padding-top:12px">
+<h3>添加任务</h3>
+<label>执行时间（分 时 日 月 周）</label>
+<input type="text" id="cronSchedule" placeholder="例如: 0 */6 * * *" value="0 */6 * * *">
+<label>执行命令</label>
+<input type="text" id="cronCommand" placeholder="例如: python3 /root/scripts/stock.py">
+<button class="btn-primary" onclick="cronAdd()">➕ 添加</button>
+</div>
+<div style="margin:12px 0;border-top:1px solid #eee;padding-top:12px">
+<h3>删除任务</h3>
+<label>输入要删除的任务完整行（从任务列表复制）</label>
+<input type="text" id="cronDeleteLine" placeholder="例如: 0 */6 * * * python3 /root/scripts/stock.py">
+<button class="btn-danger" onclick="cronDelete()">🗑 删除</button>
+</div>
+<pre id="cronOutput" style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;font-size:12px;max-height:250px;overflow:auto;white-space:pre-wrap;word-break:break-all">操作结果将显示在这里</pre>
+<div class="form-actions"><button class="btn-secondary" onclick="closeModal('cronModal')">关闭</button></div>
+</div></div>
+
 <!-- 工具执行输出弹窗 -->
 <div class="modal" id="toolModal"><div class="modal-box">
 <span class="close" onclick="closeModal('toolModal')">&times;</span>
@@ -458,10 +457,10 @@ function loadScripts(){
             var st=s.status||'idle'
             if(st==='running')rn++;if(st==='success')su++;if(['failed','timeout','error'].indexOf(st)!==-1)fa++
             var remark=s.remark?'<div class="remark-line">'+s.remark+'</div>':''
-            var stop=st==='running'?'<button class="btn-stop" data-name="'+s.name+'">⏹ 停止</button>':''
+            var stopBtn = st==='running'?'<button class="btn-stop" data-name="'+s.name+'" onclick="stopScript(\''+s.name+'\')">⏹ 停止</button>':''
             html+='<div class="card '+st+'"><div class="top"><span class="name">'+s.name+'</span>'+badge(st)+'</div>'+remark+
                 '<div class="info"><span class="lbl">📏</span> '+(s.size/1024).toFixed(1)+'KB &nbsp; <span class="lbl">🕐</span> '+s.mtime+'</div>'+
-                '<div class="actions"><button class="btn-run" data-name="'+s.name+'" '+(st==='running'?'disabled':'')+'>▶ 运行</button>'+stop+'</div></div>'
+                '<div class="actions"><button class="btn-run" data-name="'+s.name+'" '+(st==='running'?'disabled':'')+'>▶ 运行</button>'+stopBtn+'</div></div>'
         })
         g.innerHTML=html;updateStats(d.length,rn,su,fa);bindCardEvents()
     }).catch(()=>{})
@@ -472,7 +471,12 @@ function loadAll(){loadScripts();loadMem();loadApkCache()}
 
 function bindCardEvents(){
     document.querySelectorAll('.btn-run').forEach(function(b){b.onclick=function(){var n=this.dataset.name;if(!confirm('执行 "'+n+'" ?'))return;fetch('/api/run/'+encodeURIComponent(n),{method:'POST'}).then(r=>r.json()).then(d=>{alert(d.message||d.error);loadAll()})}})
-    document.querySelectorAll('.btn-stop').forEach(function(b){b.onclick=function(){var n=this.dataset.name;if(!confirm('停止 "'+n+'" ?'))return;fetch('/api/stop/'+encodeURIComponent(n),{method:'POST'}).then(r=>r.json()).then(d=>{alert(d.message||d.error);loadAll()})}})
+}
+
+// ========== 停止脚本（调用独立脚本） ==========
+function stopScript(name){
+    if(!confirm('停止 "'+name+'" ?'))return
+    doRunTool('stop_script.py', ['--name', name], '⏹ 停止脚本')
 }
 
 // ========== 通用：调用工具脚本（带参数） ==========
@@ -501,7 +505,6 @@ function doRunTool(script, args, label) {
         document.getElementById('toolTitle').textContent='✅ '+label+' 完成'
         document.getElementById('toolOutput').textContent=d.output||'执行完成'
         loadAll()
-        // 关闭弹窗
         setTimeout(function(){closeModal('toolModal')}, 2000)
     }).catch(e=>{
         document.getElementById('toolTitle').textContent='❌ '+label+' 失败'
@@ -586,6 +589,46 @@ function loadLog() {
     }).catch(()=>{})
 }
 
+// ========== 定时管理 ==========
+function cronList() {
+    document.getElementById('cronOutput').textContent='⏳ 加载中...'
+    doRunTool('cron_manager.py', ['--list'], '📋 查看任务列表')
+    // 由于 doRunTool 会弹出 toolModal，但我们希望输出在 cronModal 中，所以需要特殊处理
+    // 这里改用直接 fetch
+    fetch('/api/run_tool',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({script:'cron_manager.py', args:['--list']})})
+    .then(r=>r.json()).then(d=>{
+        document.getElementById('cronOutput').textContent=d.output||'执行完成'
+    }).catch(e=>{
+        document.getElementById('cronOutput').textContent='❌ 加载失败: '+e.message
+    })
+}
+
+function cronAdd() {
+    var schedule = document.getElementById('cronSchedule').value.trim()
+    var command = document.getElementById('cronCommand').value.trim()
+    if (!schedule || !command) { alert('请填写完整信息'); return }
+    if (schedule.split(/\s+/).length !== 5) { alert('时间格式错误，应为 分 时 日 月 周'); return }
+    document.getElementById('cronOutput').textContent='⏳ 添加中...'
+    fetch('/api/run_tool',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({script:'cron_manager.py', args:['--add', schedule, command]})})
+    .then(r=>r.json()).then(d=>{
+        document.getElementById('cronOutput').textContent=d.output||'执行完成'
+    }).catch(e=>{
+        document.getElementById('cronOutput').textContent='❌ 添加失败: '+e.message
+    })
+}
+
+function cronDelete() {
+    var line = document.getElementById('cronDeleteLine').value.trim()
+    if (!line) { alert('请输入要删除的任务行'); return }
+    document.getElementById('cronOutput').textContent='⏳ 删除中...'
+    fetch('/api/run_tool',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({script:'cron_manager.py', args:['--delete', line]})})
+    .then(r=>r.json()).then(d=>{
+        document.getElementById('cronOutput').textContent=d.output||'执行完成'
+    }).catch(e=>{
+        document.getElementById('cronOutput').textContent='❌ 删除失败: '+e.message
+    })
+}
+
 // ========== 工具按钮（无参数） ==========
 function runSimpleTool(script, label) {
     doRunTool(script, [], label)
@@ -602,15 +645,14 @@ document.getElementById('btnLuci').onclick=goLuci
 document.getElementById('btn9090').onclick=go9090
 document.getElementById('btnReboot').onclick=rebootRouter
 
-// 工具按钮
-document.getElementById('btnNew').onclick=function(){populateEditSelect();openModal('newModal')}
+document.getElementById('btnNew').onclick=function(){openModal('newModal')}
 document.getElementById('btnEdit').onclick=function(){populateEditSelect();openModal('editModal')}
 document.getElementById('btnDel').onclick=function(){populateDelSelect();openModal('delModal')}
 document.getElementById('btnLog').onclick=function(){populateLogSelect();openModal('logModal')}
 document.getElementById('btnUpload').onclick=function(){document.getElementById('fileInput').click()}
 document.getElementById('btnSync').onclick=function(){runSimpleTool('sync_github.py','📥 同步GitHub')}
 document.getElementById('btnGc').onclick=function(){runSimpleTool('gc_force.py','🧹 GC')}
-document.getElementById('btnCron').onclick=function(){runSimpleTool('cron_manager.py','⏰ 定时')}
+document.getElementById('btnCron').onclick=function(){openModal('cronModal')}
 document.getElementById('btnKill').onclick=function(){runSimpleTool('kill_top_process.py','💣 清理')}
 document.getElementById('btnCache').onclick=function(){runSimpleTool('clean_apk_cache.py','🧹 缓存')}
 
@@ -624,6 +666,7 @@ document.body.appendChild(fileInput)
 document.getElementById('btnUpload').onclick = function(){fileInput.click()}
 
 document.getElementById('toolModal').onclick=function(e){if(e.target===this)closeModal('toolModal')}
+document.getElementById('cronModal').onclick=function(e){if(e.target===this)closeModal('cronModal')}
 
 fetchRouterIP();loadAll();setInterval(loadAll,10000)
 </script>
