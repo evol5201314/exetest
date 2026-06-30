@@ -7,7 +7,7 @@ import os, sys, json, urllib.request, urllib.error
 DEBUG = False
 
 CONFIG = {
-    "repo_url": "https://github.com/evol5201314/exetese",
+    "repo_url": "https://github.com/evol5201314/exetest",
     "branch": "main",
 }
 
