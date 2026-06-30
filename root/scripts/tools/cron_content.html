@@ -1,0 +1,42 @@
+<div class="modal active" id="cronModal" style="display:flex;">
+<div class="modal-box" style="max-width:720px;width:94%;">
+<span class="close" onclick="closeModalByName('cronModal')">&times;</span>
+<h2>⏰ 定时任务管理 (Cron)</h2>
+
+<div style="margin:12px 0;background:#f5f7fa;padding:16px;border-radius:8px;">
+    <div style="margin-bottom:12px;">
+        <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">执行时间</label>
+        <input type="text" id="cronSchedule" placeholder="分 时 日 月 周" value="0 */6 * * *" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;font-family:monospace;">
+    </div>
+
+    <div style="margin-bottom:12px;">
+        <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">执行命令</label>
+        <select id="cronCommandSelect" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;background:#fff;">
+            <option value="">-- 选择脚本 --</option>
+        </select>
+    </div>
+
+    <div style="margin-bottom:12px;">
+        <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">自定义命令</label>
+        <input type="text" id="cronCustomCmd" placeholder="或直接输入完整命令" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;font-family:monospace;">
+        <div style="font-size:12px;color:#888;margin-top:6px;">💡 示例: <code>0 */6 * * *</code> = 每6小时执行一次</div>
+    </div>
+
+    <button class="btn-success" onclick="cronAdd()" style="width:100%;padding:10px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#4caf50;color:#fff;font-size:14px;">➕ 添加任务</button>
+</div>
+
+<div style="margin-top:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <label style="font-weight:500;font-size:14px;color:#555;">📋 当前任务列表</label>
+        <button class="btn-secondary" onclick="cronRefreshList()" style="padding:4px 14px;border:none;border-radius:4px;cursor:pointer;font-size:12px;background:#eceff1;">🔄 刷新</button>
+    </div>
+    <div id="cronListContainer" style="max-height:300px;overflow-y:auto;border:1px solid #eee;border-radius:8px;background:#fff;">
+        <div style="color:#999;padding:20px;text-align:center;">点击「刷新」加载任务</div>
+    </div>
+</div>
+
+<div style="margin-top:16px;text-align:right;">
+    <button class="btn-secondary" onclick="closeModalByName('cronModal')" style="padding:6px 24px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;">关闭</button>
+</div>
+</div>
+</div>
