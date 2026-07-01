@@ -3,6 +3,7 @@
 beizhu = "🧹 清理 APK 缓存"
 
 import subprocess, sys
+
 try:
     result = subprocess.run(['apk', 'cache', 'clean'], capture_output=True, text=True, timeout=30)
     if result.returncode == 0:
