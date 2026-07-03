@@ -95,7 +95,6 @@
 <h2>⏰ 定时任务管理</h2>
 
 <div style="margin:12px 0;background:#f5f7fa;padding:16px;border-radius:8px;">
-
     <div style="margin-bottom:12px;">
         <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">执行模式</label>
         <select id="cronMode" onchange="cronModeChange()" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;background:#fff;">
@@ -106,7 +105,6 @@
             <option value="minutes">⏱️ 每N分钟</option>
         </select>
     </div>
-
     <div id="cronDaily" style="display:none;margin-bottom:12px;">
         <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">每天执行时间</label>
         <select id="cronDailyHour" style="width:60px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;display:inline-block;margin-right:4px;">
@@ -135,7 +133,6 @@
             <option value="56">56</option><option value="57">57</option><option value="58">58</option><option value="59">59</option>
         </select>分
     </div>
-
     <div id="cronWeekly" style="display:none;margin-bottom:12px;">
         <div style="margin-bottom:6px;">
             <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">每周几执行</label>
@@ -178,7 +175,6 @@
             </select>分
         </div>
     </div>
-
     <div id="cronHourly" style="display:none;margin-bottom:12px;">
         <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">每小时第几分钟执行</label>
         <select id="cronHourlyMinute" style="width:60px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
@@ -200,7 +196,6 @@
         </select>分
         <div style="font-size:12px;color:#888;margin-top:4px;">💡 例如: 选择 30，则每小时 30 分执行</div>
     </div>
-
     <div id="cronMinutes" style="display:none;margin-bottom:12px;">
         <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">每</label>
         <select id="cronMinutesInterval" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;display:inline-block;margin-right:4px;">
@@ -213,13 +208,11 @@
         </select>分钟执行一次
         <div style="font-size:12px;color:#888;margin-top:4px;">💡 例如: 选择 15，则每 15 分钟执行一次</div>
     </div>
-
     <div id="cronCustom" style="margin-bottom:12px;">
         <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">Cron 表达式</label>
         <input type="text" id="cronSchedule" placeholder="分 时 日 月 周" value="0 */6 * * *" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;font-family:monospace;">
         <div style="font-size:12px;color:#888;margin-top:4px;">💡 格式: 分 时 日 月 周 | 示例: <code>0 */6 * * *</code> = 每6小时</div>
     </div>
-
     <div style="margin-bottom:12px;">
         <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">执行命令</label>
         <select id="cronCommandSelect" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;background:#fff;margin-bottom:6px;">
@@ -227,10 +220,8 @@
         </select>
         <input type="text" id="cronCustomCmd" placeholder="或直接输入完整命令" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;font-family:monospace;">
     </div>
-
     <button class="btn-success" onclick="cronAdd()" style="width:100%;padding:10px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#4caf50;color:#fff;font-size:14px;">➕ 添加任务</button>
 </div>
-
 <div style="margin-top:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <label style="font-weight:500;font-size:14px;color:#555;">📋 当前任务列表</label>
@@ -240,9 +231,156 @@
         <div style="color:#999;padding:20px;text-align:center;">点击「刷新」加载任务</div>
     </div>
 </div>
-
 <div style="margin-top:16px;text-align:right;">
     <button class="btn-secondary" onclick="closeModalByName('cronModal')" style="padding:6px 24px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;">关闭</button>
 </div>
 </div>
 </div>
+
+<!-- ====== 进程管理弹窗 ====== -->
+<div class="modal active" id="procModal" style="display:none;">
+<div class="modal-box" style="max-width:950px;width:94%;">
+<span class="close" onclick="window.closeProcModal()">&times;</span>
+<h2>📊 进程管理</h2>
+<div style="margin:12px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <span style="font-size:13px;color:#555;">排序：</span>
+    <button class="btn-secondary" onclick="window.loadProcess('rss_mb')" style="padding:4px 14px;font-size:12px;border-radius:4px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;">💾 内存</button>
+    <button class="btn-secondary" onclick="window.loadProcess('cpu_percent')" style="padding:4px 14px;font-size:12px;border-radius:4px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;">⚡ CPU</button>
+    <button class="btn-secondary" onclick="window.loadProcess('mem_percent')" style="padding:4px 14px;font-size:12px;border-radius:4px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;">📊 内存%</button>
+    <button class="btn-secondary" onclick="window.loadProcess('pid')" style="padding:4px 14px;font-size:12px;border-radius:4px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;">📋 PID</button>
+    <span style="font-size:12px;color:#888;margin-left:auto;">共 <span id="procCount">0</span> 个进程</span>
+    <button class="refresh-btn" onclick="window.loadProcess('rss_mb')" style="padding:4px 14px;font-size:12px;border-radius:4px;border:1px solid #667eea;background:#667eea;color:#fff;cursor:pointer;">🔄 刷新</button>
+</div>
+<div id="procTableWrap" style="max-height:450px;overflow-y:auto;border-radius:8px;border:1px solid #e8ecf1;background:#fff;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead style="position:sticky;top:0;z-index:1;">
+            <tr style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;">
+                <th style="padding:10px 12px;text-align:left;width:60px;border-radius:8px 0 0 0;">PID</th>
+                <th style="padding:10px 12px;text-align:left;">进程名</th>
+                <th style="padding:10px 12px;text-align:right;width:90px;">内存(MB)</th>
+                <th style="padding:10px 12px;text-align:right;width:80px;">CPU%</th>
+                <th style="padding:10px 12px;text-align:right;width:80px;">内存%</th>
+                <th style="padding:10px 12px;text-align:center;width:130px;border-radius:0 8px 0 0;">操作</th>
+            </tr>
+        </thead>
+        <tbody id="procTableBody">
+            <tr><td colspan="6" style="padding:30px;text-align:center;color:#999;">⏳ 加载中...</td></tr>
+        </tbody>
+    </table>
+</div>
+<div style="margin-top:12px;text-align:right;">
+    <button onclick="window.closeProcModal()" style="padding:8px 28px;border:none;border-radius:20px;cursor:pointer;font-size:14px;font-weight:500;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(102,126,234,0.3);">关闭</button>
+</div>
+</div>
+</div>
+
+<script>
+window.init_procModal = function() {
+    window.loadProcess('rss_mb');
+};
+
+window.closeProcModal = function() {
+    var el = document.getElementById('procModal');
+    if (el) {
+        el.style.display = 'none';
+        var container = document.getElementById('modalContainer');
+        container.innerHTML = '';
+        modalLoaded = false;
+    }
+};
+
+window.loadProcess = function(sortBy) {
+    var tbody = document.getElementById('procTableBody');
+    if (!tbody) {
+        loadModal('procModal');
+        setTimeout(function() { window.loadProcess(sortBy || 'rss_mb'); }, 300);
+        return;
+    }
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#999;">⏳ 加载中...</td></tr>';
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: 'process_manager.py', args: ['--sort', sortBy || 'rss_mb', '--limit', '30', '--json'] })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        var rawOutput = d.output || '';
+        if (rawOutput === '') {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#f44336;">❌ 后端返回空数据</td></tr>';
+            return;
+        }
+        try {
+            var data = JSON.parse(rawOutput);
+            if (!data || !data.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#999;">📭 无进程数据</td></tr>';
+                document.getElementById('procCount').textContent = '0';
+                return;
+            }
+            var html = '';
+            data.forEach(function(p, idx) {
+                var bgColor = (idx % 2 === 0) ? '#ffffff' : '#f8f9fc';
+                var cpuColor = p.cpu_percent > 50 ? '#f44336' : p.cpu_percent > 20 ? '#ff9800' : '#4caf50';
+                var memColor = p.mem_percent > 50 ? '#f44336' : p.mem_percent > 20 ? '#ff9800' : '#4caf50';
+                html += '<tr style="background:' + bgColor + ';">' +
+                    '<td style="padding:8px 12px;font-family:monospace;font-weight:600;color:#333;">' + p.pid + '</td>' +
+                    '<td style="padding:8px 12px;" title="' + (p.cmdline || p.name) + '">' + p.name + '</td>' +
+                    '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:500;">' + p.rss_mb.toFixed(1) + '</td>' +
+                    '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:500;color:' + cpuColor + ';">' + p.cpu_percent.toFixed(1) + '%</td>' +
+                    '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:500;color:' + memColor + ';">' + p.mem_percent.toFixed(1) + '%</td>' +
+                    '<td style="padding:6px 12px;text-align:center;">' +
+                        '<button onclick="window.killProcess(' + p.pid + ')" style="background:#f44336;color:#fff;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;margin-right:4px;">杀</button>' +
+                        '<button onclick="window.restartProcess(' + p.pid + ')" style="background:#4caf50;color:#fff;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;">重启</button>' +
+                    '</td>' +
+                    '</tr>';
+            });
+            tbody.innerHTML = html;
+            document.getElementById('procCount').textContent = data.length;
+        } catch(e) {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#f44336;">❌ 解析失败<br><pre style="text-align:left;background:#1e1e1e;color:#d4d4d4;padding:10px;border-radius:4px;font-size:12px;max-height:150px;overflow:auto;white-space:pre-wrap;">' + rawOutput.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre></td></tr>';
+        }
+    })
+    .catch(function(e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#f44336;">❌ 请求失败: ' + e.message + '</td></tr>';
+    });
+};
+
+window.killProcess = function(pid) {
+    if (!confirm('确定终止进程 PID: ' + pid + ' 吗？')) return;
+    var btns = document.querySelectorAll('#procTableBody button');
+    btns.forEach(function(b) { b.disabled = true; });
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: 'process_manager.py', args: ['--kill', pid] })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        alert(d.output || '执行完成');
+        window.loadProcess('rss_mb');
+    })
+    .catch(function(e) {
+        alert('❌ 失败: ' + e.message);
+        window.loadProcess('rss_mb');
+    });
+};
+
+window.restartProcess = function(pid) {
+    if (!confirm('确定重启进程 PID: ' + pid + ' 吗？')) return;
+    var btns = document.querySelectorAll('#procTableBody button');
+    btns.forEach(function(b) { b.disabled = true; });
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: 'process_manager.py', args: ['--restart', pid] })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        alert(d.output || '执行完成');
+        window.loadProcess('rss_mb');
+    })
+    .catch(function(e) {
+        alert('❌ 失败: ' + e.message);
+        window.loadProcess('rss_mb');
+    });
+};
+</script>
