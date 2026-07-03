@@ -293,7 +293,7 @@ def run_tool():
         response.status = 404
         return json.dumps({'error': f'工具脚本 {script} 不存在'})
     try:
-        cmd = ['python3', script_path] + args
+        cmd = ['python3', script_path] + [str(a) for a in args]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         output = result.stdout + result.stderr
         if not output.strip():
