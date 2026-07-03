@@ -145,10 +145,19 @@ def get_scripts():
     scripts = []
     if not os.path.exists(SCRIPTS_DIR):
         return scripts
+    
+    # 🆕 定义黑名单（不显示在面板中的文件）
+    EXCLUDE_SCRIPTS = ['bottle.py', 'app.py', '__init__.py']
+    
     with open(STATUS_FILE, 'r') as f:
         status_data = json.load(f)
     for fn in sorted(os.listdir(SCRIPTS_DIR)):
         full_path = os.path.join(SCRIPTS_DIR, fn)
+        
+        # 🆕 跳过黑名单中的文件（新增位置在这里）
+        if fn in EXCLUDE_SCRIPTS:
+            continue
+        
         if fn.endswith('.py') and os.path.isfile(full_path):
             st = os.stat(full_path)
             s = status_data.get(fn, {'status': 'idle', 'pid': None})
