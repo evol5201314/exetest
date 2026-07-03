@@ -21,7 +21,7 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
 
 【弹窗脚本添加规范】（新增功能请遵守）
   1. 在 modal_content.html 中添加弹窗 HTML，ID 自定义（如 myModal）
-  2. 在独立脚本首行添加 # popup: 弹窗ID（如 # popup: myModal）
+  2. 在独立脚本第一行行添加 # popup: 弹窗ID（如 # popup: myModal）必须在第一行 否则失效
   3. 面板点击「运行」时自动识别并弹出窗口，无需修改 app.py
   4. 弹窗的业务逻辑 JS 函数放在 modal_content.html 末尾的 <script> 中
   5. 弹窗的初始化函数命名为 init_弹窗ID，面板会自动调用
