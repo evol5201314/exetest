@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-beizhu = "📈 面板核心（轻量化，所有功能独立脚本，弹窗动态加载）"
+
+beizhu = "📈 面板核心（Bottle 轻量化版本）"
 """
 ================================================================
 ⚠️ 面板核心原则：轻量化是绝对核心 请勿删除或违反以下规则
@@ -11,15 +12,22 @@ beizhu = "📈 面板核心（轻量化，所有功能独立脚本，弹窗动�
 
 【核心原则】
   1. 面板本身只保留：脚本列表展示 + 内存/缓存显示
-  2. 所有操作（运行/停止/新建/编辑/删除/上传/日志/同步/定时/清理）
+  2. 所有操作（运行/停止/新建/编辑/删除/上传/日志/同步/定时/清理/进程管理）
      必须通过「独立脚本」实现，点击时临时启动，执行完毕立即释放内存
   3. 严禁将任何附属功能的代码合并到主面板 app.py 中
   4. 主面板 app.py 只负责：路由 + 调用独立脚本 + 显示结果
   5. 所有独立脚本放在 /root/scripts/tools/ 目录下
   6. 所有弹窗 HTML 动态加载，不写死在主面板中
 
+【弹窗脚本添加规范】（新增功能请遵守）
+  1. 在 modal_content.html 中添加弹窗 HTML，ID 自定义（如 myModal）
+  2. 在独立脚本首行添加 # popup: 弹窗ID（如 # popup: myModal）
+  3. 面板点击「运行」时自动识别并弹出窗口，无需修改 app.py
+  4. 弹窗的业务逻辑 JS 函数放在 modal_content.html 末尾的 <script> 中
+  5. 弹窗的初始化函数命名为 init_弹窗ID，面板会自动调用
+
 【面板常驻内存包含】
-  - Flask 框架 (~6-8 MB)
+  - Bottle 框架 (~1-2 MB)
   - 脚本列表展示
   - 内存/缓存显示
   - 工具调用接口 (/api/run_tool)
@@ -47,6 +55,7 @@ beizhu = "📈 面板核心（轻量化，所有功能独立脚本，弹窗动�
   │ 清理运存    │ 独立脚本         │ tools/kill_top_process.py   │
   │ 清理缓存    │ 独立脚本         │ tools/clean_apk_cache.py    │
   │ 清理脚本(GC)│ 独立脚本         │ tools/gc_force.py           │
+  │ 进程管理    │ 独立脚本+动态弹窗 │ tools/process_manager.py    │
   └─────────────┴──────────────────┴─────────────────────────────┘
 
 【修改代码时请注意】
@@ -55,17 +64,23 @@ beizhu = "📈 面板核心（轻量化，所有功能独立脚本，弹窗动�
   ❌ 不要在主面板中直接写弹窗 HTML
   ✅ 新增功能请以独立脚本方式实现，通过 /api/run_tool 调用
   ✅ 新增弹窗请在 modal_content.html 中添加
+  ✅ 弹窗脚本首行使用 # popup: 弹窗ID 标记
+  ✅ 弹窗 JS 函数请放在 modal_content.html 末尾的 <script> 中
 
 ================================================================
 """
 
-
-
-import os, sys, json, subprocess, threading, signal, gc
+import os
+import sys
+import json
+import subprocess
+import signal
+import gc
+import re
 from datetime import datetime
-from flask import Flask, render_template_string, jsonify, request
+from bottle import Bottle, route, run, request, response, static_file
 
-app = Flask(__name__)
+app = Bottle()
 
 SCRIPTS_DIR = "/root/scripts"
 TOOLS_DIR = "/root/scripts/tools"
@@ -172,93 +187,135 @@ def get_router_ip():
     except:
         return "192.168.1.1"
 
-@app.route('/')
+# ========== 静态文件路由 ==========
+@route('/static/<filename:path>')
+def serve_static(filename):
+    return static_file(filename, root="/root/scripts/static")
+
+# ========== API 路由 ==========
+@route('/')
 def index():
-    return render_template_string(HTML)
+    return HTML
 
-@app.route('/api/scripts')
+@route('/api/scripts')
 def api_scripts():
-    return jsonify(get_scripts())
+    response.content_type = 'application/json'
+    return json.dumps(get_scripts())
 
-@app.route('/api/meminfo')
+@route('/api/meminfo')
 def api_meminfo():
-    return jsonify(get_meminfo())
+    response.content_type = 'application/json'
+    return json.dumps(get_meminfo())
 
-@app.route('/api/apk_cache_size')
+@route('/api/apk_cache_size')
 def api_apk_cache_size():
-    return jsonify({'size_mb': get_apk_cache_size()})
+    response.content_type = 'application/json'
+    return json.dumps({'size_mb': get_apk_cache_size()})
 
-@app.route('/api/router_ip')
+@route('/api/router_ip')
 def api_router_ip():
-    return jsonify({'ip': get_router_ip()})
+    response.content_type = 'application/json'
+    return json.dumps({'ip': get_router_ip()})
 
-# ========== 停止脚本（调用独立脚本 stop_script.py） ==========
-@app.route('/api/stop/<name>', methods=['POST'])
+# ========== 检查脚本是否为弹窗脚本 ==========
+@route('/api/check_popup/<name>')
+def check_popup(name):
+    if '/' in name or '\\' in name:
+        return json.dumps({'popup': None})
+    path = os.path.join(SCRIPTS_DIR, name)
+    if not os.path.exists(path):
+        path = os.path.join(TOOLS_DIR, name)
+        if not os.path.exists(path):
+            return json.dumps({'popup': None})
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            first_line = f.readline()
+            if first_line.strip().startswith('# popup:'):
+                popup_id = first_line.split(':', 1)[1].strip()
+                return json.dumps({'popup': popup_id})
+    except:
+        pass
+    return json.dumps({'popup': None})
+
+# ========== 停止脚本 ==========
+@route('/api/stop/<name>', method='POST')
 def stop_script(name):
     try:
         script_path = os.path.join(TOOLS_DIR, 'stop_script.py')
         if not os.path.exists(script_path):
-            return jsonify({'error': 'stop_script.py 不存在'}), 500
+            response.status = 500
+            return json.dumps({'error': 'stop_script.py 不存在'})
         result = subprocess.run(
             ['python3', script_path, '--name', name],
             capture_output=True, text=True, timeout=30
         )
         output = result.stdout + result.stderr
-        return jsonify({'message': output.strip() or '执行完成'})
+        response.content_type = 'application/json'
+        return json.dumps({'message': output.strip() or '执行完成'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        response.status = 500
+        return json.dumps({'error': str(e)})
 
-# ========== 获取脚本内容（编辑用，面板常驻） ==========
-@app.route('/api/get/<name>')
+# ========== 获取脚本内容（编辑用） ==========
+@route('/api/get/<name>')
 def get_script(name):
     if '/' in name or '\\' in name:
-        return jsonify({'error': '文件名不合法'}), 400
+        response.status = 400
+        return json.dumps({'error': '文件名不合法'})
     path = os.path.join(SCRIPTS_DIR, name)
     if not os.path.exists(path):
-        return jsonify({'error': '脚本不存在'}), 404
+        response.status = 404
+        return json.dumps({'error': '脚本不存在'})
     with open(path, 'r') as f:
         content = f.read()
-    return jsonify({'name': name, 'content': content})
+    response.content_type = 'application/json'
+    return json.dumps({'name': name, 'content': content})
 
-# ========== 统一工具调用（所有功能通过此接口调用独立脚本） ==========
-# ⚠️ 重要：禁止在此接口中添加任何业务逻辑！只负责调用独立脚本并返回输出
-@app.route('/api/run_tool', methods=['POST'])
+# ========== 统一工具调用 ==========
+@route('/api/run_tool', method='POST')
 def run_tool():
     data = request.json
     script = data.get('script', '')
     args = data.get('args', [])
     if not script:
-        return jsonify({'error': '未指定脚本'}), 400
+        response.status = 400
+        return json.dumps({'error': '未指定脚本'})
     if not script.endswith('.py') or '/' in script:
-        return jsonify({'error': '不安全的脚本名'}), 400
+        response.status = 400
+        return json.dumps({'error': '不安全的脚本名'})
 
-    # 清理运存时，自动传递面板 PID 作为排除项
     if script == 'kill_top_process.py':
         if '--exclude' not in str(args):
             args = ['--exclude', str(os.getpid())] + args
 
     script_path = os.path.join(TOOLS_DIR, script)
     if not os.path.exists(script_path):
-        return jsonify({'error': f'工具脚本 {script} 不存在'}), 404
+        response.status = 404
+        return json.dumps({'error': f'工具脚本 {script} 不存在'})
     try:
         cmd = ['python3', script_path] + args
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         output = result.stdout + result.stderr
         if not output.strip():
             output = '✅ 执行完成（无输出）'
-        return jsonify({'output': output})
+        response.content_type = 'application/json'
+        return json.dumps({'output': output})
     except subprocess.TimeoutExpired:
-        return jsonify({'output': '⏱ 执行超时（300秒）'})
+        response.status = 500
+        return json.dumps({'output': '⏱ 执行超时（300秒）'})
     except Exception as e:
-        return jsonify({'output': f'❌ 执行失败: {e}'})
+        response.status = 500
+        return json.dumps({'output': f'❌ 执行失败: {e}'})
 
-@app.route('/api/restart_router', methods=['POST'])
+@route('/api/restart_router', method='POST')
 def restart_router():
     try:
         subprocess.Popen(['reboot'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return jsonify({'message': '✅ 路由器正在重启...'})
+        response.content_type = 'application/json'
+        return json.dumps({'message': '✅ 路由器正在重启...'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        response.status = 500
+        return json.dumps({'error': str(e)})
 
 # ==================== HTML 模板 ====================
 HTML = r'''
@@ -292,6 +349,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .btn-luci{background:#1565c0;color:#fff}.btn-luci:hover{background:#0d47a1}
 .btn-9090{background:#e65100;color:#fff}.btn-9090:hover{background:#bf360c}
 .btn-reboot{background:#c62828;color:#fff}.btn-reboot:hover{background:#b71c1c}
+.btn-proc{background:#00897b;color:#fff}.btn-proc:hover{background:#00695c}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .card{background:#fff;border-radius:10px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-left:4px solid #ddd}
 .card.idle{border-left-color:#90a4ae}
@@ -397,6 +455,7 @@ select{appearance:auto;background:#fff}
 <button class="btn-reboot" id="btnReboot">🔄 重启路由</button>
 <button class="btn-kill" id="btnKill">💣 清理运存</button>
 <button class="btn-cache" id="btnCache">🧹 清理缓存</button>
+<button class="btn-proc" id="btnProc">📊 进程管理</button>
 </div>
 
 <!-- 弹窗容器 -->
@@ -405,7 +464,7 @@ select{appearance:auto;background:#fff}
 <div class="grid" id="grid"></div>
 </div>
 
-<!-- 工具执行输出弹窗（常驻，带保持打开开关，排版已优化） -->
+<!-- 工具执行输出弹窗（常驻，带保持打开开关） -->
 <div class="modal" id="toolModal"><div class="modal-box">
 <span class="close" onclick="closeModal('toolModal')">&times;</span>
 <h2 id="toolTitle">工具执行</h2>
@@ -482,9 +541,24 @@ function updateStats(t, r, s, f) {
 }
 function loadAll() { loadScripts(); loadMem(); loadApkCache(); }
 
-// ========== 运行脚本 ==========
+// ========== 运行脚本（自动检测 popup 标记） ==========
 function runScript(name) {
-    doRunTool('run_script.py', ['--name', name], '▶ 运行 ' + name);
+    fetch('/api/check_popup/' + encodeURIComponent(name))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.popup) {
+                loadModal(data.popup);
+                var initFn = window['init_' + data.popup];
+                if (typeof initFn === 'function') {
+                    setTimeout(initFn, 200);
+                }
+                return;
+            }
+            doRunTool('run_script.py', ['--name', name], '▶ 运行 ' + name);
+        })
+        .catch(function() {
+            doRunTool('run_script.py', ['--name', name], '▶ 运行 ' + name);
+        });
 }
 
 // ========== 停止脚本 ==========
@@ -493,7 +567,7 @@ function stopScript(name) {
     doRunTool('stop_script.py', ['--name', name], '⏹ 停止脚本');
 }
 
-// ========== 通用工具调用（支持保持打开开关） ==========
+// ========== 通用工具调用 ==========
 function doRunTool(script, args, label) {
     var modal = document.getElementById('toolModal');
     document.getElementById('keepOpenCheck').checked = false;
@@ -533,7 +607,7 @@ function doRunTool(script, args, label) {
 
 function runSimpleTool(script, label) { doRunTool(script, [], label); }
 
-// ========== 通用弹窗加载器 ==========
+// ========== 通用弹窗加载器（支持自动执行 script） ==========
 function loadModal(name) {
     var container = document.getElementById('modalContainer');
     if (modalLoaded) {
@@ -548,14 +622,30 @@ function loadModal(name) {
             if (name === 'logModal') populateLogSelect();
             if (name === 'cronModal') { loadScriptsForCron(); cronRefreshList(); }
             if (name === 'syncModal') loadSyncConfig();
+            if (name === 'procModal') { setTimeout(function() { loadProcess('rss_mb'); }, 200); }
         }
         return;
     }
     fetch('/static/modal_content.html')
-        .then(r => r.text())
-        .then(html => {
-            container.innerHTML = html;
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            var scripts = tempDiv.querySelectorAll('script');
+            var cleanHtml = html.replace(/<script>[\s\S]*?<\/script>/g, '');
+            
+            container.innerHTML = cleanHtml;
             modalLoaded = true;
+            
+            scripts.forEach(function(scriptTag) {
+                var code = scriptTag.textContent || scriptTag.innerHTML;
+                try {
+                    eval(code);
+                } catch(e) {
+                    console.log('弹窗 JS 执行失败:', e);
+                }
+            });
+            
             document.querySelectorAll('#modalContainer .modal').forEach(function(el) {
                 el.style.display = 'none';
             });
@@ -567,9 +657,10 @@ function loadModal(name) {
                 if (name === 'logModal') populateLogSelect();
                 if (name === 'cronModal') { loadScriptsForCron(); cronRefreshList(); }
                 if (name === 'syncModal') loadSyncConfig();
+                if (name === 'procModal') { setTimeout(function() { loadProcess('rss_mb'); }, 200); }
             }
         })
-        .catch(e => { alert('加载模块失败: ' + e.message); });
+        .catch(function(e) { alert('加载模块失败: ' + e.message); });
 }
 
 function closeModalByName(name) {
@@ -916,6 +1007,13 @@ function cronAdd() {
     .catch(e => { alert('添加失败: ' + e.message); });
 }
 
+// ========== 进程管理 ==========
+document.getElementById('btnProc').onclick = function() {
+    loadModal('procModal');
+};
+
+// 进程管理函数（在 modal_content.html 中定义，这里只留按钮事件）
+
 // ========== 跳转 ==========
 function goLuci() { window.open('http://' + (routerIP || '192.168.1.1') + '/cgi-bin/luci', '_blank'); }
 function go9090() { window.open('http://' + (routerIP || '192.168.1.1') + ':9090/ui', '_blank'); }
@@ -942,5 +1040,5 @@ setInterval(loadAll, 10000);
 if __name__ == '__main__':
     init_files()
     kill_process_on_port(5000)
-    print("🚀 面板启动在 http://0.0.0.0:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    print("🚀 Bottle 面板启动在 http://0.0.0.0:5000")
+    run(host='0.0.0.0', port=5000, debug=False)
