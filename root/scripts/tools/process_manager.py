@@ -2,6 +2,10 @@
 # popup: procModal
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# btn: 📊 进程管理
+# group: router
+# order: 20
+# action: runScript:process_manager.py
 beizhu = "📊 进程管理"
 
 import os
