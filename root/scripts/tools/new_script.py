@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# popup: newModal
+# btn: ➕ 新建脚本
+# group: script
+# order: 10
+# action: runScript:new_script.py
 beizhu = "📝 新建脚本（支持参数）"
 
 import os, sys, argparse
