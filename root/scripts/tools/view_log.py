@@ -1,3 +1,4 @@
+# popup: logModal
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 beizhu = "📄 查看脚本日志 / 清理日志"
