@@ -673,7 +673,7 @@ function loadModal(name) {
             container.innerHTML = html;
             window.modalLoaded = true;
             if (scriptCode) {
-                try { (1, eval)(scriptCode); } catch(e) { console.log('弹窗 JS 执行失败:', e); }
+                try { (1, eval)(scriptCode); } catch(e) { ... }
             }
             document.querySelectorAll('#modalContainer .modal').forEach(function(el) {
                 el.style.display = 'none';
