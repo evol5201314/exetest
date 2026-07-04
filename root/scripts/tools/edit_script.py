@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# popup: editModal
 # btn: ✏️ 编辑脚本
 # group: script
 # order: 30
