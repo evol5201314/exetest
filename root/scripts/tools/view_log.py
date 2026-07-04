@@ -4,7 +4,7 @@ beizhu = "📄 查看脚本日志"
 
 import os, sys, json, argparse
 
-STATUS_FILE = "/tmp/script_status.json"
+LOGS_DIR = "/root/scripts/logs"          # 日志文件存放目录
 SCRIPTS_DIR = "/root/scripts"
 
 def main():
@@ -22,19 +22,16 @@ def main():
         print("❌ 请指定脚本名 --name")
         sys.exit(1)
     
-    if not os.path.exists(STATUS_FILE):
-        print("❌ 状态文件不存在")
-        sys.exit(1)
-    
-    with open(STATUS_FILE, 'r') as f:
-        data = json.load(f)
-    
-    s = data.get(args.name, {})
-    output = f"状态: {s.get('status', 'idle')}\n"
-    output += f"PID: {s.get('pid', '无')}\n"
-    output += f"\n--- 输出 ---\n"
-    output += s.get('last_output', '暂无输出')
-    print(output)
+    log_path = os.path.join(LOGS_DIR, f"{args.name}.log")
+    if os.path.exists(log_path):
+        with open(log_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        if content.strip():
+            print(content)
+        else:
+            print("📭 日志文件为空")
+    else:
+        print("📭 暂无日志（该脚本尚未运行或未产生输出）")
 
 if __name__ == "__main__":
     main()
