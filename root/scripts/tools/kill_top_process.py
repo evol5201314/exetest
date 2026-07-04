@@ -3,7 +3,8 @@
 # btn: 💣 清理运存
 # group: router
 # order: 70
-# action: runScript:kill_top_process.py
+# action: runTool:kill_top_process.py
+# btn-class: btn-dark-red
 beizhu = "💣 清理占用内存最高的非关键进程（自动跳过面板）"
 
 import os, sys, signal, gc, subprocess, glob, argparse
