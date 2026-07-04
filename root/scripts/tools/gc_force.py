@@ -3,7 +3,8 @@
 # btn: 🧹 清理脚本
 # group: script
 # order: 70
-# action: runScript:gc_force.py
+# action: runTool:gc_force.py
+# btn-class: btn-gray
 beizhu = "🧹 强制垃圾回收"
 
 import gc
