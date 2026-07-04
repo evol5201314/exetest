@@ -316,7 +316,7 @@ function closeModalByName(name) {
         el.style.display = 'none';
         var container = document.getElementById('modalContainer');
         if (container) container.innerHTML = '';
-        modalLoaded = false;  // modalLoaded 由 app.py 定义，这里直接使用
+        modalLoaded = false;   // modalLoaded 由 app.py 定义，用于标记弹窗是否已加载
     }
 }
 
@@ -380,7 +380,6 @@ function deleteScript() {
 }
 
 // ========== 上传脚本 ==========
-// 无需特殊初始化，保留函数
 function doUpload() {
     var input = document.getElementById('uploadFileInput');
     if (!input.files || !input.files.length) {
