@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# popup: syncModal
+# btn: 📥 同步脚本
+# group: script
+# order: 60
+# action: runScript:sync_github.py
 beizhu = "📥 同步 GitHub（支持自动保存仓库地址到自身）"
 
 import os, sys, json, urllib.request, urllib.error, argparse
