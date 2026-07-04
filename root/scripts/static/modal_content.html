@@ -6,19 +6,19 @@
 【加载流程】
   1. 面板调用 loadModal('某个ID')
   2. fetch 本文件 -> 提取 HTML 放入 modalContainer
-  3. (1, eval) 执行末尾 <script> 中的全部 JS（全局作用域）
+  3. (1, eval) 执行末尾 <script> 中的全部 JS（强制全局作用域）
   4. 自动查找并调用 init_弹窗ID() 函数
 
 【添加新弹窗步骤】
   1. 在本文件中添加弹窗 HTML，ID 自定义（如 myModal）
-  2. 在末尾 <script> 中添加业务逻辑函数，并定义 init_myModal()
+  2. 在本文件末尾 <script> 中添加业务逻辑函数，并定义 window.init_myModal
   3. 在 tools/ 下的脚本前15行内加入 # popup: myModal
-  4. 面板会自动调用 init_myModal，无需修改 app.py
+  4. 面板会自动调用 window.init_myModal，无需修改 app.py
 
-【关闭按钮说明】
-  - 所有弹窗右上角 X 和底部关闭按钮必须使用 window.closeModalByName('ID')
-  - window.closeModalByName 已在本文件中定义
-
+【关键规范】
+  - 所有初始化函数必须挂载到 window：window.init_弹窗ID = function() { ... }
+  - 关闭函数统一使用 window.closeModalByName('ID')，已全局定义
+  - 进程管理沿用 window.closeProcModal，保持不变
 ================================================================
 -->
 
@@ -78,22 +78,22 @@
 </div>
 </div>
 
-<!-- ====== 查看日志弹窗 (新版：支持最新日志、清空当前、清空全部) ====== -->
+<!-- ====== 查看日志弹窗 ====== -->
 <div class="modal active" id="logModal" style="display:none;">
 <div class="modal-box">
 <span class="close" onclick="window.closeModalByName('logModal')">&times;</span>
 <h2>📄 查看日志</h2>
 <div style="margin:12px 0">
 <label>选择脚本</label>
-<select id="logSelect" onchange="loadLog()" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;background:#fff;">
+<select id="logSelect" onchange="window.loadLog()" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px;background:#fff;">
     <option value="">📌 最新日志</option>
 </select>
 </div>
 <pre id="logContent" style="background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;font-size:12px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all">请选择脚本</pre>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;flex-wrap:wrap;gap:8px;">
     <div style="display:flex;gap:8px;">
-        <button class="btn-log" onclick="clearCurrentLog()" style="background:#ff9800;color:#fff;border:none;border-radius:6px;padding:5px 16px;cursor:pointer;font-size:13px;">🗑 清空当前</button>
-        <button class="btn-log" onclick="clearAllLogs()" style="background:#f44336;color:#fff;border:none;border-radius:6px;padding:5px 16px;cursor:pointer;font-size:13px;">🧹 清空全部</button>
+        <button class="btn-log" onclick="window.clearCurrentLog()" style="background:#ff9800;color:#fff;border:none;border-radius:6px;padding:5px 16px;cursor:pointer;font-size:13px;">🗑 清空当前</button>
+        <button class="btn-log" onclick="window.clearAllLogs()" style="background:#f44336;color:#fff;border:none;border-radius:6px;padding:5px 16px;cursor:pointer;font-size:13px;">🧹 清空全部</button>
     </div>
     <button class="btn-secondary" onclick="window.closeModalByName('logModal')" style="padding:6px 20px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;">关闭</button>
 </div>
@@ -111,36 +111,34 @@
     <div style="font-size:12px;color:#888;margin-top:6px;">💡 支持公开仓库和私有仓库（带 Token），修改后自动保存</div>
 </div>
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
-    <button class="btn-primary" onclick="doSync()" style="padding:8px 28px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#667eea;color:#fff;font-size:14px;">📥 开始同步</button>
+    <button class="btn-primary" onclick="window.doSync()" style="padding:8px 28px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#667eea;color:#fff;font-size:14px;">📥 开始同步</button>
     <button class="btn-secondary" onclick="window.closeModalByName('syncModal')" style="padding:8px 20px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;color:#333;font-size:14px;">取消</button>
 </div>
 <pre id="syncOutput" style="margin-top:12px;background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;display:none;">执行中...</pre>
 </div>
 </div>
 
-<!-- ====== 定时任务弹窗 ====== -->
-<!-- 此处保留你原来完整的 cronModal HTML 内容，不要替换掉。以下为示例结构 -->
+<!-- ====== 定时任务弹窗（请将您原来的完整 cronModal HTML 放在此处） ====== -->
 <div class="modal active" id="cronModal" style="display:none;">
 <div class="modal-box" style="max-width:720px;width:94%;">
 <span class="close" onclick="window.closeModalByName('cronModal')">&times;</span>
 <h2>⏰ 定时任务管理</h2>
-<!-- 你的完整 cron 管理界面 -->
+<!-- 您的完整 cron 界面代码 -->
 </div>
 </div>
 
-<!-- ====== 进程管理弹窗 ====== -->
-<!-- 此处保留你原来完整的 procModal HTML 内容 -->
+<!-- ====== 进程管理弹窗（请将您原来的完整 procModal HTML 放在此处） ====== -->
 <div class="modal active" id="procModal" style="display:none;">
 <div class="modal-box" style="max-width:950px;width:94%;">
 <span class="close" onclick="window.closeProcModal()">&times;</span>
 <h2>📊 进程管理</h2>
-<!-- 你的完整进程表格 -->
+<!-- 您的完整进程管理界面代码 -->
 </div>
 </div>
 
-<!-- ==================== 业务逻辑 JS ==================== -->
+<!-- ==================== 业务逻辑 JS（所有函数均挂载 window） ==================== -->
 <script>
-// ========== 通用弹窗关闭（全局挂载） ==========
+// 通用弹窗关闭
 window.closeModalByName = function(name) {
     var el = document.getElementById(name);
     if (el) {
@@ -152,64 +150,66 @@ window.closeModalByName = function(name) {
 };
 
 // ========== 新建脚本 ==========
-function createScript() {
+window.createScript = function() {
     var name = document.getElementById('newName').value.trim();
     var content = document.getElementById('newContent').value;
     if (!name) { alert('请输入文件名'); return; }
     if (!content) { alert('代码内容不能为空'); return; }
     doRunTool('new_script.py', ['--name', name, '--content', content], '📝 新建脚本');
     window.closeModalByName('newModal');
-}
+};
 
 // ========== 编辑脚本 ==========
-function init_editModal() {
-    populateEditSelect();
-}
-function populateEditSelect() {
+window.init_editModal = function() {
+    window.populateEditSelect();
+};
+window.populateEditSelect = function() {
     fetch('/api/scripts').then(r => r.json()).then(d => {
         var sel = document.getElementById('editSelect');
         if (!sel) return;
         sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
         if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; sel.appendChild(opt); });
     }).catch(function() {});
-}
-function loadEditContent() {
+};
+window.loadEditContent = function() {
     var name = document.getElementById('editSelect').value;
     if (!name) return;
     fetch('/api/get/' + encodeURIComponent(name)).then(r => r.json()).then(d => {
         if (d.error) { alert(d.error); return; }
         document.getElementById('editContent').value = d.content || '';
     }).catch(function() {});
-}
-function saveEdit() {
+};
+window.saveEdit = function() {
     var name = document.getElementById('editSelect').value;
     var content = document.getElementById('editContent').value;
     if (!name) { alert('请选择脚本'); return; }
     if (!content) { alert('内容不能为空'); return; }
     doRunTool('edit_script.py', ['--name', name, '--content', content], '✏️ 编辑脚本');
     window.closeModalByName('editModal');
-}
+};
 
 // ========== 删除脚本 ==========
-function init_delModal() { populateDelSelect(); }
-function populateDelSelect() {
+window.init_delModal = function() {
+    window.populateDelSelect();
+};
+window.populateDelSelect = function() {
     fetch('/api/scripts').then(r => r.json()).then(d => {
         var sel = document.getElementById('delSelect');
         if (!sel) return;
         sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
         if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; sel.appendChild(opt); });
     }).catch(function() {});
-}
-function deleteScript() {
+};
+window.deleteScript = function() {
     var name = document.getElementById('delSelect').value;
     if (!name) { alert('请选择脚本'); return; }
     if (!confirm('确定删除 "' + name + '" 吗？')) return;
     doRunTool('delete_script.py', ['--name', name], '🗑 删除脚本');
     window.closeModalByName('delModal');
-}
+};
 
 // ========== 上传脚本 ==========
-function doUpload() {
+window.doUpload = function() {
     var input = document.getElementById('uploadFileInput');
     if (!input.files || !input.files.length) { alert('请选择文件'); return; }
     var file = input.files[0];
@@ -236,13 +236,13 @@ function doUpload() {
     };
     reader.onerror = function() { output.textContent = '❌ 读取文件失败'; };
     reader.readAsText(file);
-}
+};
 
 // ========== 查看日志 ==========
-function init_logModal() {
-    populateLogSelect();
-}
-function populateLogSelect() {
+window.init_logModal = function() {
+    window.populateLogSelect();
+};
+window.populateLogSelect = function() {
     fetch('/api/run_tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -263,12 +263,12 @@ function populateLogSelect() {
                     sel.appendChild(opt);
                 });
             }
-            loadLog();
+            window.loadLog();
         } catch (e) {}
     })
     .catch(function() {});
-}
-function loadLog() {
+};
+window.loadLog = function() {
     var name = document.getElementById('logSelect').value;
     document.getElementById('logContent').textContent = '⏳ 加载中...';
     var args = name ? ['--name', name] : ['--latest'];
@@ -280,8 +280,8 @@ function loadLog() {
     .then(r => r.json())
     .then(d => { document.getElementById('logContent').textContent = d.output || '暂无输出'; })
     .catch(e => { document.getElementById('logContent').textContent = '❌ 加载失败: ' + e.message; });
-}
-function clearCurrentLog() {
+};
+window.clearCurrentLog = function() {
     var name = document.getElementById('logSelect').value;
     if (!name) { alert('请先选择一个具体的脚本'); return; }
     if (!confirm('确定清空 "' + name + '" 的日志吗？')) return;
@@ -291,10 +291,10 @@ function clearCurrentLog() {
         body: JSON.stringify({ script: 'view_log.py', args: ['--clear', '--name', name] })
     })
     .then(r => r.json())
-    .then(d => { alert(d.output || '操作完成'); loadLog(); })
+    .then(d => { alert(d.output || '操作完成'); window.loadLog(); })
     .catch(e => { alert('操作失败: ' + e.message); });
-}
-function clearAllLogs() {
+};
+window.clearAllLogs = function() {
     if (!confirm('⚠️ 确定要清空所有脚本的日志吗？此操作不可恢复！')) return;
     fetch('/api/run_tool', {
         method: 'POST',
@@ -302,13 +302,15 @@ function clearAllLogs() {
         body: JSON.stringify({ script: 'view_log.py', args: ['--clear-all'] })
     })
     .then(r => r.json())
-    .then(d => { alert(d.output || '操作完成'); loadLog(); populateLogSelect(); })
+    .then(d => { alert(d.output || '操作完成'); window.loadLog(); window.populateLogSelect(); })
     .catch(e => { alert('操作失败: ' + e.message); });
-}
+};
 
 // ========== 同步 GitHub ==========
-function init_syncModal() { loadSyncConfig(); }
-function loadSyncConfig() {
+window.init_syncModal = function() {
+    window.loadSyncConfig();
+};
+window.loadSyncConfig = function() {
     fetch('/api/run_tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -323,24 +325,22 @@ function loadSyncConfig() {
         var input = document.getElementById('syncRepoInput');
         if (input) input.value = 'https://github.com/evol5201314/exetest';
     });
-}
-function doSync() {
+};
+window.doSync = function() {
     var repo = document.getElementById('syncRepoInput').value.trim();
     if (!repo) { alert('请输入仓库地址'); return; }
     window.closeModalByName('syncModal');
     doRunTool('sync_github.py', ['--repo', repo], '📥 同步GitHub');
-}
-
-// ========== 定时任务（替换为你原来的完整 cron 函数） ==========
-function init_cronModal() {
-    loadScriptsForCron();
-    cronRefreshList();
-}
-// 以下保持你原有的 cron 相关函数 ...
-
-// ========== 进程管理（替换为你原来的完整 proc 函数） ==========
-window.init_procModal = function() {
-    window.loadProcess('rss_mb');
 };
-// 以下保持你原有的 proc 相关函数 ...
+
+// ========== 定时任务（请将您原来的 cron 函数改为 window.xxx 形式并放在此处） ==========
+// window.init_cronModal = function() { ... };
+// window.loadScriptsForCron = function() { ... };
+// ...
+
+// ========== 进程管理（保持您原来完整的 window.xxx 形式） ==========
+// window.init_procModal = function() { ... };
+// window.closeProcModal = function() { ... };
+// window.loadProcess = function(sortBy) { ... };
+// ...
 </script>
