@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# popup: syncModal
 # btn: 📥 同步脚本
 # group: script
 # order: 60
