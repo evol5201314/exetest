@@ -1,5 +1,45 @@
+<!--
+================================================================
+⚠️ 动态弹窗文件结构说明（重要！后续修改请遵守以下规则）
+================================================================
+
+【文件用途】
+  本文件由主面板 app.py 动态加载，包含所有弹窗的 HTML 结构和业务逻辑 JS。
+  面板通过 fetch('/static/modal_content.html') 获取整个文件，提取 HTML 插入
+  modalContainer，并 eval 执行末尾的 <script> 中的 JS 代码。
+
+【文件结构】
+  1. 第一部分：一系列弹窗的 HTML 代码（每个弹窗一个 <div class="modal" id="xxxModal">）
+     - 弹窗的 ID 必须与后续 JS 中的初始化函数名对应（如 id="newModal"）
+     - 弹窗的显示/隐藏由 CSS 控制，默认 display:none
+     - 弹窗内的交互元素（按钮、下拉框等）直接绑定 onclick 事件
+
+  2. 第二部分：末尾一个 <script> 标签，包含所有弹窗的业务逻辑 JS 函数
+     - 函数命名规则：populateXxxSelect、loadXxx、clearXxx 等，保持清晰
+     - 弹窗的初始化函数（如果有）命名为 init_弹窗ID（例如 init_newModal），
+       面板加载弹窗时会自动调用（见 app.py 中的 loadModal 逻辑）
+     - 所有调用后端脚本的操作统一通过 /api/run_tool 接口，传入 script 和 args
+     - 函数的作用域必须是全局（window 级别），因为 loadModal 会用 eval 执行
+
+【如何添加新弹窗（请严格遵守）】
+  1. 在 HTML 部分添加一个新的 <div class="modal" id="新ID"> 弹窗结构
+  2. 在末尾 <script> 中编写该弹窗所需的全部 JS 函数
+  3. 如果弹窗需要在打开时自动初始化某些数据，编写一个 init_新ID 函数，
+     并在函数内进行必要的 fetch 和 DOM 操作
+  4. 弹窗 JS 中不要定义全局变量污染命名空间，所有变量用 var 限定在函数内
+  5. 按钮的 onclick 直接指向末尾 <script> 中的全局函数
+
+【日志模块特殊说明】
+  - 日志功能由 view_log.py 独立脚本完成，支持 --latest、--name、--clear、--clear-all
+  - 日志弹窗 HTML 中包含“清空当前”和“清空全部”按钮，JS 函数已写在末尾
+  - 日志文件存储在 /root/scripts/logs/，每个脚本一个 .log 文件
+  - 轻量化原则：所有操作通过临时调用 view_log.py 完成，不增加面板常驻内存
+
+================================================================
+-->
+
 <!-- ====== 新建脚本弹窗 ====== -->
-<div class="modal active" id="newModal" style="display:flex;">
+<div class="modal active" id="newModal" style="display:none;">
 <div class="modal-box">
 <span class="close" onclick="closeModalByName('newModal')">&times;</span>
 <h2>📝 新建脚本</h2>
@@ -54,7 +94,7 @@
 </div>
 </div>
 
-<!-- ====== 查看日志弹窗 ====== -->
+<!-- ====== 查看日志弹窗 (新版：支持最新日志、清空当前、清空全部) ====== -->
 <div class="modal active" id="logModal" style="display:none;">
 <div class="modal-box">
 <span class="close" onclick="closeModalByName('logModal')">&times;</span>
@@ -94,7 +134,7 @@
 </div>
 </div>
 
-<!-- ====== 定时任务弹窗 ====== -->
+<!-- ====== 定时任务弹窗 (保留原有完整时间选择器) ====== -->
 <div class="modal active" id="cronModal" style="display:none;">
 <div class="modal-box" style="max-width:720px;width:94%;">
 <span class="close" onclick="closeModalByName('cronModal')">&times;</span>
@@ -110,8 +150,136 @@
             <option value="minutes">⏱️ 每N分钟</option>
         </select>
     </div>
-    <!-- 时间选择部分保持不变，此处省略以节省篇幅，实际文件请保留原有完整内容 -->
-    <!-- 请务必复制你原来 cronModal 里的完整时间选择控件 -->
+    <!-- 每天 -->
+    <div id="cronDaily" style="display:none;margin-bottom:12px;">
+        <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">每天执行时间</label>
+        <select id="cronDailyHour" style="width:60px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;display:inline-block;margin-right:4px;">
+            <option value="0">00</option><option value="1">01</option><option value="2">02</option><option value="3">03</option>
+            <option value="4">04</option><option value="5">05</option><option value="6">06</option><option value="7">07</option>
+            <option value="8">08</option><option value="9">09</option><option value="10">10</option><option value="11">11</option>
+            <option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option>
+            <option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option>
+            <option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option>
+        </select>时
+        <select id="cronDailyMinute" style="width:60px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;display:inline-block;margin-left:4px;margin-right:4px;">
+            <option value="0">00</option><option value="1">01</option><option value="2">02</option><option value="3">03</option>
+            <option value="4">04</option><option value="5">05</option><option value="6">06</option><option value="7">07</option>
+            <option value="8">08</option><option value="9">09</option><option value="10">10</option><option value="11">11</option>
+            <option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option>
+            <option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option>
+            <option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option>
+            <option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option>
+            <option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option>
+            <option value="32">32</option><option value="33">33</option><option value="34">34</option><option value="35">35</option>
+            <option value="36">36</option><option value="37">37</option><option value="38">38</option><option value="39">39</option>
+            <option value="40">40</option><option value="41">41</option><option value="42">42</option><option value="43">43</option>
+            <option value="44">44</option><option value="45">45</option><option value="46">46</option><option value="47">47</option>
+            <option value="48">48</option><option value="49">49</option><option value="50">50</option><option value="51">51</option>
+            <option value="52">52</option><option value="53">53</option><option value="54">54</option><option value="55">55</option>
+            <option value="56">56</option><option value="57">57</option><option value="58">58</option><option value="59">59</option>
+        </select>分
+    </div>
+    <!-- 每周 -->
+    <div id="cronWeekly" style="display:none;margin-bottom:12px;">
+        <div style="margin-bottom:6px;">
+            <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">每周几执行</label>
+            <select id="cronWeeklyDay" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
+                <option value="0">周日</option>
+                <option value="1">周一</option>
+                <option value="2">周二</option>
+                <option value="3">周三</option>
+                <option value="4">周四</option>
+                <option value="5">周五</option>
+                <option value="6">周六</option>
+            </select>
+        </div>
+        <div>
+            <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">执行时间</label>
+            <select id="cronWeeklyHour" style="width:60px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;display:inline-block;margin-right:4px;">
+                <option value="0">00</option><option value="1">01</option><option value="2">02</option><option value="3">03</option>
+                <option value="4">04</option><option value="5">05</option><option value="6">06</option><option value="7">07</option>
+                <option value="8">08</option><option value="9">09</option><option value="10">10</option><option value="11">11</option>
+                <option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option>
+                <option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option>
+                <option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option>
+            </select>时
+            <select id="cronWeeklyMinute" style="width:60px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;display:inline-block;margin-left:4px;margin-right:4px;">
+                <option value="0">00</option><option value="1">01</option><option value="2">02</option><option value="3">03</option>
+                <option value="4">04</option><option value="5">05</option><option value="6">06</option><option value="7">07</option>
+                <option value="8">08</option><option value="9">09</option><option value="10">10</option><option value="11">11</option>
+                <option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option>
+                <option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option>
+                <option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option>
+                <option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option>
+                <option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option>
+                <option value="32">32</option><option value="33">33</option><option value="34">34</option><option value="35">35</option>
+                <option value="36">36</option><option value="37">37</option><option value="38">38</option><option value="39">39</option>
+                <option value="40">40</option><option value="41">41</option><option value="42">42</option><option value="43">43</option>
+                <option value="44">44</option><option value="45">45</option><option value="46">46</option><option value="47">47</option>
+                <option value="48">48</option><option value="49">49</option><option value="50">50</option><option value="51">51</option>
+                <option value="52">52</option><option value="53">53</option><option value="54">54</option><option value="55">55</option>
+                <option value="56">56</option><option value="57">57</option><option value="58">58</option><option value="59">59</option>
+            </select>分
+        </div>
+    </div>
+    <!-- 每小时 -->
+    <div id="cronHourly" style="display:none;margin-bottom:12px;">
+        <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">每小时第几分钟执行</label>
+        <select id="cronHourlyMinute" style="width:60px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
+            <option value="0">00</option><option value="1">01</option><option value="2">02</option><option value="3">03</option>
+            <option value="4">04</option><option value="5">05</option><option value="6">06</option><option value="7">07</option>
+            <option value="8">08</option><option value="9">09</option><option value="10">10</option><option value="11">11</option>
+            <option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option>
+            <option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option>
+            <option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option>
+            <option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option>
+            <option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option>
+            <option value="32">32</option><option value="33">33</option><option value="34">34</option><option value="35">35</option>
+            <option value="36">36</option><option value="37">37</option><option value="38">38</option><option value="39">39</option>
+            <option value="40">40</option><option value="41">41</option><option value="42">42</option><option value="43">43</option>
+            <option value="44">44</option><option value="45">45</option><option value="46">46</option><option value="47">47</option>
+            <option value="48">48</option><option value="49">49</option><option value="50">50</option><option value="51">51</option>
+            <option value="52">52</option><option value="53">53</option><option value="54">54</option><option value="55">55</option>
+            <option value="56">56</option><option value="57">57</option><option value="58">58</option><option value="59">59</option>
+        </select>分
+        <div style="font-size:12px;color:#888;margin-top:4px;">💡 例如: 选择 30，则每小时 30 分执行</div>
+    </div>
+    <!-- 每N分钟 -->
+    <div id="cronMinutes" style="display:none;margin-bottom:12px;">
+        <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">每</label>
+        <select id="cronMinutesInterval" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;display:inline-block;margin-right:4px;">
+            <option value="5">5</option><option value="10">10</option><option value="15" selected>15</option>
+            <option value="20">20</option><option value="30">30</option><option value="60">60</option>
+        </select>分钟执行一次
+        <div style="font-size:12px;color:#888;margin-top:4px;">💡 例如: 选择 15，则每 15 分钟执行一次</div>
+    </div>
+    <!-- 自定义 -->
+    <div id="cronCustom" style="margin-bottom:12px;">
+        <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">Cron 表达式</label>
+        <input type="text" id="cronSchedule" placeholder="分 时 日 月 周" value="0 */6 * * *" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;font-family:monospace;">
+        <div style="font-size:12px;color:#888;margin-top:4px;">💡 格式: 分 时 日 月 周 | 示例: <code>0 */6 * * *</code> = 每6小时</div>
+    </div>
+    <div style="margin-bottom:12px;">
+        <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">执行命令</label>
+        <select id="cronCommandSelect" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;background:#fff;margin-bottom:6px;">
+            <option value="">-- 选择脚本 --</option>
+        </select>
+        <input type="text" id="cronCustomCmd" placeholder="或直接输入完整命令" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;font-family:monospace;">
+    </div>
+    <button class="btn-success" onclick="cronAdd()" style="width:100%;padding:10px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#4caf50;color:#fff;font-size:14px;">➕ 添加任务</button>
+</div>
+<div style="margin-top:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <label style="font-weight:500;font-size:14px;color:#555;">📋 当前任务列表</label>
+        <button class="btn-secondary" onclick="cronRefreshList()" style="padding:4px 14px;border:none;border-radius:4px;cursor:pointer;font-size:12px;background:#eceff1;">🔄 刷新</button>
+    </div>
+    <div id="cronListContainer" style="max-height:300px;overflow-y:auto;border:1px solid #eee;border-radius:8px;background:#fff;">
+        <div style="color:#999;padding:20px;text-align:center;">点击「刷新」加载任务</div>
+    </div>
+</div>
+<div style="margin-top:16px;text-align:right;">
+    <button class="btn-secondary" onclick="closeModalByName('cronModal')" style="padding:6px 24px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;">关闭</button>
+</div>
 </div>
 </div>
 
@@ -120,13 +288,152 @@
 <div class="modal-box" style="max-width:950px;width:94%;">
 <span class="close" onclick="window.closeProcModal()">&times;</span>
 <h2>📊 进程管理</h2>
-<!-- 进程管理内容保持不变 -->
+<div style="margin:12px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <span style="font-size:13px;color:#555;">排序：</span>
+    <button class="btn-secondary" onclick="window.loadProcess('rss_mb')" style="padding:4px 14px;font-size:12px;border-radius:4px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;">💾 内存</button>
+    <button class="btn-secondary" onclick="window.loadProcess('cpu_percent')" style="padding:4px 14px;font-size:12px;border-radius:4px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;">⚡ CPU</button>
+    <button class="btn-secondary" onclick="window.loadProcess('mem_percent')" style="padding:4px 14px;font-size:12px;border-radius:4px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;">📊 内存%</button>
+    <button class="btn-secondary" onclick="window.loadProcess('pid')" style="padding:4px 14px;font-size:12px;border-radius:4px;border:1px solid #ddd;background:#f5f5f5;cursor:pointer;">📋 PID</button>
+    <span style="font-size:12px;color:#888;margin-left:auto;">共 <span id="procCount">0</span> 个进程</span>
+    <button class="refresh-btn" onclick="window.loadProcess('rss_mb')" style="padding:4px 14px;font-size:12px;border-radius:4px;border:1px solid #667eea;background:#667eea;color:#fff;cursor:pointer;">🔄 刷新</button>
+</div>
+<div id="procTableWrap" style="max-height:450px;overflow-y:auto;border-radius:8px;border:1px solid #e8ecf1;background:#fff;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead style="position:sticky;top:0;z-index:1;">
+            <tr style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;">
+                <th style="padding:10px 12px;text-align:left;width:60px;border-radius:8px 0 0 0;">PID</th>
+                <th style="padding:10px 12px;text-align:left;">进程名</th>
+                <th style="padding:10px 12px;text-align:right;width:90px;">内存(MB)</th>
+                <th style="padding:10px 12px;text-align:right;width:80px;">CPU%</th>
+                <th style="padding:10px 12px;text-align:right;width:80px;">内存%</th>
+                <th style="padding:10px 12px;text-align:center;width:130px;border-radius:0 8px 0 0;">操作</th>
+            </tr>
+        </thead>
+        <tbody id="procTableBody">
+            <tr><td colspan="6" style="padding:30px;text-align:center;color:#999;">⏳ 加载中...</td></tr>
+        </tbody>
+    </table>
+</div>
+<div style="margin-top:12px;text-align:right;">
+    <button onclick="window.closeProcModal()" style="padding:8px 28px;border:none;border-radius:20px;cursor:pointer;font-size:14px;font-weight:500;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(102,126,234,0.3);">关闭</button>
+</div>
 </div>
 </div>
 
+<!-- ==================== 业务逻辑 JS ==================== -->
 <script>
-// ========== 通用函数 ==========
+// ========== 通用弹窗操作 ==========
+function closeModalByName(name) {
+    var el = document.getElementById(name);
+    if (el) {
+        el.style.display = 'none';
+        // 清空 modalContainer 防止内存泄漏
+        var container = document.getElementById('modalContainer');
+        if (container) container.innerHTML = '';
+        modalLoaded = false;
+    }
+}
+
+// ========== 新建脚本 ==========
+function createScript() {
+    var name = document.getElementById('newName').value.trim();
+    var content = document.getElementById('newContent').value;
+    if (!name) { alert('请输入文件名'); return; }
+    if (!content) { alert('代码内容不能为空'); return; }
+    doRunTool('new_script.py', ['--name', name, '--content', content], '📝 新建脚本');
+    closeModalByName('newModal');
+}
+
+// ========== 编辑脚本 ==========
+function populateEditSelect() {
+    fetch('/api/scripts').then(r => r.json()).then(d => {
+        var sel = document.getElementById('editSelect');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
+        if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; sel.appendChild(opt); });
+    }).catch(function() {});
+}
+
+function loadEditContent() {
+    var name = document.getElementById('editSelect').value;
+    if (!name) return;
+    fetch('/api/get/' + encodeURIComponent(name)).then(r => r.json()).then(d => {
+        if (d.error) { alert(d.error); return; }
+        document.getElementById('editContent').value = d.content || '';
+    }).catch(function() {});
+}
+
+function saveEdit() {
+    var name = document.getElementById('editSelect').value;
+    var content = document.getElementById('editContent').value;
+    if (!name) { alert('请选择脚本'); return; }
+    if (!content) { alert('内容不能为空'); return; }
+    doRunTool('edit_script.py', ['--name', name, '--content', content], '✏️ 编辑脚本');
+    closeModalByName('editModal');
+}
+
+// ========== 删除脚本 ==========
+function populateDelSelect() {
+    fetch('/api/scripts').then(r => r.json()).then(d => {
+        var sel = document.getElementById('delSelect');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
+        if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; sel.appendChild(opt); });
+    }).catch(function() {});
+}
+
+function deleteScript() {
+    var name = document.getElementById('delSelect').value;
+    if (!name) { alert('请选择脚本'); return; }
+    if (!confirm('确定删除 "' + name + '" 吗？')) return;
+    doRunTool('delete_script.py', ['--name', name], '🗑 删除脚本');
+    closeModalByName('delModal');
+}
+
+// ========== 上传脚本 ==========
+function doUpload() {
+    var input = document.getElementById('uploadFileInput');
+    if (!input.files || !input.files.length) {
+        alert('请选择文件');
+        return;
+    }
+    var file = input.files[0];
+    if (!file.name.endsWith('.py')) {
+        alert('只支持 .py 文件');
+        return;
+    }
+    var output = document.getElementById('uploadOutput');
+    output.style.display = 'block';
+    output.textContent = '⏳ 读取文件...';
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var content = e.target.result;
+        var base64 = btoa(content);
+        output.textContent = '⏳ 上传中...';
+        fetch('/api/run_tool', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ script: 'upload_script.py', args: ['--filename', file.name, '--content', base64] })
+        })
+        .then(r => r.json())
+        .then(d => {
+            output.textContent = d.output || '执行完成';
+            if (d.output && d.output.indexOf('✅') !== -1) {
+                loadAll();
+                input.value = '';
+            }
+        })
+        .catch(e => {
+            output.textContent = '❌ 上传失败: ' + e.message;
+        });
+    };
+    reader.onerror = function() { output.textContent = '❌ 读取文件失败'; };
+    reader.readAsText(file);
+}
+
+// ========== 查看日志（新版：支持最新日志、清空当前、清空全部） ==========
 function populateLogSelect() {
+    // 获取所有脚本列表，填充下拉框，并自动加载最新日志
     fetch('/api/run_tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -194,7 +501,7 @@ function clearCurrentLog() {
     .then(r => r.json())
     .then(d => {
         alert(d.output || '操作完成');
-        loadLog();
+        loadLog();  // 刷新显示
     })
     .catch(e => {
         alert('操作失败: ' + e.message);
@@ -213,18 +520,278 @@ function clearAllLogs() {
     .then(d => {
         alert(d.output || '操作完成');
         loadLog();
-        populateLogSelect();
+        populateLogSelect();  // 刷新下拉列表
     })
     .catch(e => {
         alert('操作失败: ' + e.message);
     });
 }
 
-// ========== 其他弹窗的函数（请保留你原有的完整内容） ==========
-// 包括：createScript, populateEditSelect, loadEditContent, saveEdit,
-//        populateDelSelect, deleteScript, doUpload, loadSyncConfig, doSync,
-//        cronModeChange, updateCronSchedule, cronRefreshList, cronDelete, cronAdd,
-//        loadProcess, killProcess, restartProcess, closeProcModal 等
-// 这里只列出日志相关的新增/修改函数，你的完整文件中应包含所有原有 JS 代码。
+// ========== 同步 GitHub ==========
+function loadSyncConfig() {
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: 'sync_github.py', args: ['--get-config'] })
+    })
+    .then(r => r.json())
+    .then(d => {
+        var input = document.getElementById('syncRepoInput');
+        if (input) input.value = d.output.trim() || 'https://github.com/evol5201314/exetest';
+    })
+    .catch(e => {
+        var input = document.getElementById('syncRepoInput');
+        if (input) input.value = 'https://github.com/evol5201314/exetest';
+    });
+}
 
+function doSync() {
+    var repo = document.getElementById('syncRepoInput').value.trim();
+    if (!repo) { alert('请输入仓库地址'); return; }
+    closeModalByName('syncModal');
+    doRunTool('sync_github.py', ['--repo', repo], '📥 同步GitHub');
+}
+
+// ========== 定时任务 ==========
+function loadScriptsForCron() {
+    fetch('/api/scripts').then(r => r.json()).then(d => {
+        var sel = document.getElementById('cronCommandSelect');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
+        if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = 'python3 /root/scripts/' + s.name; opt.textContent = s.name; sel.appendChild(opt); });
+    }).catch(function() {});
+}
+
+function cronModeChange() {
+    document.getElementById('cronDaily').style.display = (document.getElementById('cronMode').value === 'daily') ? 'block' : 'none';
+    document.getElementById('cronWeekly').style.display = (document.getElementById('cronMode').value === 'weekly') ? 'block' : 'none';
+    document.getElementById('cronHourly').style.display = (document.getElementById('cronMode').value === 'hourly') ? 'block' : 'none';
+    document.getElementById('cronMinutes').style.display = (document.getElementById('cronMode').value === 'minutes') ? 'block' : 'none';
+    document.getElementById('cronCustom').style.display = (document.getElementById('cronMode').value === 'custom') ? 'block' : 'none';
+    updateCronSchedule();
+}
+
+function updateCronSchedule() {
+    var mode = document.getElementById('cronMode').value;
+    var schedule = '';
+    switch (mode) {
+        case 'daily':
+            var hour = document.getElementById('cronDailyHour').value;
+            var minute = document.getElementById('cronDailyMinute').value;
+            schedule = minute + ' ' + hour + ' * * *';
+            break;
+        case 'weekly':
+            var hour = document.getElementById('cronWeeklyHour').value;
+            var minute = document.getElementById('cronWeeklyMinute').value;
+            var day = document.getElementById('cronWeeklyDay').value;
+            schedule = minute + ' ' + hour + ' * * ' + day;
+            break;
+        case 'hourly':
+            var minute = document.getElementById('cronHourlyMinute').value;
+            schedule = minute + ' * * * *';
+            break;
+        case 'minutes':
+            var interval = document.getElementById('cronMinutesInterval').value;
+            schedule = '*/' + interval + ' * * * *';
+            break;
+        case 'custom':
+        default:
+            return;
+    }
+    document.getElementById('cronSchedule').value = schedule;
+}
+
+function cronRefreshList() {
+    var container = document.getElementById('cronListContainer');
+    if (!container) return;
+    container.innerHTML = '<div style="color:#999;padding:20px;text-align:center;">⏳ 加载中...</div>';
+    fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'cron_manager.py', args: ['--list-json'] }) })
+    .then(r => r.json()).then(d => {
+        try {
+            var jobs = JSON.parse(d.output);
+            if (!jobs || !jobs.length) { container.innerHTML = '<div style="color:#999;padding:20px;text-align:center;">📭 暂无定时任务</div>'; return; }
+            var html = '';
+            jobs.forEach(function(job) {
+                var escaped = job.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                var parts = job.split(' ');
+                var schedule = parts.slice(0,5).join(' ');
+                var cmd = parts.slice(5).join(' ');
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #f0f0f0;">' +
+                    '<span style="font-family:monospace;font-size:13px;color:#333;background:#f5f5f5;padding:2px 10px;border-radius:4px;flex-shrink:0;">' + schedule + '</span>' +
+                    '<span style="font-size:13px;color:#555;word-break:break-all;flex:1;margin:0 10px;">' + cmd + '</span>' +
+                    '<button onclick="cronDelete(\'' + escaped + '\')" style="background:#f44336;color:#fff;border:none;border-radius:4px;padding:2px 12px;cursor:pointer;font-size:12px;flex-shrink:0;">🗑</button></div>';
+            });
+            container.innerHTML = html;
+        } catch (e) { container.innerHTML = '<div style="color:#f44336;padding:20px;text-align:center;">❌ 解析失败</div>'; }
+    }).catch(e => { container.innerHTML = '<div style="color:#f44336;padding:20px;text-align:center;">❌ 加载失败</div>'; });
+}
+
+function cronDelete(fullLine) {
+    if (!confirm('确定删除该定时任务吗？')) return;
+    fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'cron_manager.py', args: ['--delete', fullLine] }) })
+    .then(r => r.json()).then(d => { alert(d.output || '执行完成'); cronRefreshList(); })
+    .catch(e => { alert('删除失败: ' + e.message); });
+}
+
+function cronAdd() {
+    var mode = document.getElementById('cronMode').value;
+    var schedule = '';
+    switch (mode) {
+        case 'daily':
+            var hour = document.getElementById('cronDailyHour').value;
+            var minute = document.getElementById('cronDailyMinute').value;
+            schedule = minute + ' ' + hour + ' * * *';
+            break;
+        case 'weekly':
+            var hour = document.getElementById('cronWeeklyHour').value;
+            var minute = document.getElementById('cronWeeklyMinute').value;
+            var day = document.getElementById('cronWeeklyDay').value;
+            schedule = minute + ' ' + hour + ' * * ' + day;
+            break;
+        case 'hourly':
+            var minute = document.getElementById('cronHourlyMinute').value;
+            schedule = minute + ' * * * *';
+            break;
+        case 'minutes':
+            var interval = document.getElementById('cronMinutesInterval').value;
+            schedule = '*/' + interval + ' * * * *';
+            break;
+        case 'custom':
+        default:
+            schedule = document.getElementById('cronSchedule').value.trim();
+            break;
+    }
+    var cmdSelect = document.getElementById('cronCommandSelect').value;
+    var customCmd = document.getElementById('cronCustomCmd').value.trim();
+    var command = cmdSelect || customCmd;
+    if (!schedule) { alert('请输入执行时间'); return; }
+    if (!command) { alert('请选择脚本或输入自定义命令'); return; }
+    if (schedule.split(/\s+/).length !== 5) {
+        alert('Cron 格式错误，应为: 分 时 日 月 周');
+        return;
+    }
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: 'cron_manager.py', args: ['--add', schedule, command] })
+    })
+    .then(r => r.json())
+    .then(d => {
+        alert(d.output || '执行完成');
+        if (d.output && d.output.indexOf('✅') !== -1) {
+            document.getElementById('cronCustomCmd').value = '';
+            cronRefreshList();
+        }
+    })
+    .catch(e => { alert('添加失败: ' + e.message); });
+}
+
+// ========== 进程管理 ==========
+window.init_procModal = function() {
+    window.loadProcess('rss_mb');
+};
+
+window.closeProcModal = function() {
+    var el = document.getElementById('procModal');
+    if (el) {
+        el.style.display = 'none';
+        var container = document.getElementById('modalContainer');
+        container.innerHTML = '';
+        modalLoaded = false;
+    }
+};
+
+window.loadProcess = function(sortBy) {
+    var tbody = document.getElementById('procTableBody');
+    if (!tbody) {
+        loadModal('procModal');
+        setTimeout(function() { window.loadProcess(sortBy || 'rss_mb'); }, 300);
+        return;
+    }
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#999;">⏳ 加载中...</td></tr>';
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: 'process_manager.py', args: ['--sort', sortBy || 'rss_mb', '--limit', '30', '--json'] })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        var rawOutput = d.output || '';
+        if (rawOutput === '') {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#f44336;">❌ 后端返回空数据</td></tr>';
+            return;
+        }
+        try {
+            var data = JSON.parse(rawOutput);
+            if (!data || !data.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#999;">📭 无进程数据</td></tr>';
+                document.getElementById('procCount').textContent = '0';
+                return;
+            }
+            var html = '';
+            data.forEach(function(p, idx) {
+                var bgColor = (idx % 2 === 0) ? '#ffffff' : '#f8f9fc';
+                var cpuColor = p.cpu_percent > 50 ? '#f44336' : p.cpu_percent > 20 ? '#ff9800' : '#4caf50';
+                var memColor = p.mem_percent > 50 ? '#f44336' : p.mem_percent > 20 ? '#ff9800' : '#4caf50';
+                html += '<tr style="background:' + bgColor + ';">' +
+                    '<td style="padding:8px 12px;font-family:monospace;font-weight:600;color:#333;">' + p.pid + '</td>' +
+                    '<td style="padding:8px 12px;" title="' + (p.cmdline || p.name) + '">' + p.name + '</td>' +
+                    '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:500;">' + p.rss_mb.toFixed(1) + '</td>' +
+                    '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:500;color:' + cpuColor + ';">' + p.cpu_percent.toFixed(1) + '%</td>' +
+                    '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:500;color:' + memColor + ';">' + p.mem_percent.toFixed(1) + '%</td>' +
+                    '<td style="padding:6px 12px;text-align:center;">' +
+                        '<button onclick="window.killProcess(' + p.pid + ')" style="background:#f44336;color:#fff;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;margin-right:4px;">杀</button>' +
+                        '<button onclick="window.restartProcess(' + p.pid + ')" style="background:#4caf50;color:#fff;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;">重启</button>' +
+                    '</td></tr>';
+            });
+            tbody.innerHTML = html;
+            document.getElementById('procCount').textContent = data.length;
+        } catch(e) {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#f44336;">❌ 解析失败<br><pre style="text-align:left;background:#1e1e1e;color:#d4d4d4;padding:10px;border-radius:4px;font-size:12px;max-height:150px;overflow:auto;white-space:pre-wrap;">' + rawOutput.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre></td></tr>';
+        }
+    })
+    .catch(function(e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#f44336;">❌ 请求失败: ' + e.message + '</td></tr>';
+    });
+};
+
+window.killProcess = function(pid) {
+    if (!confirm('确定终止进程 PID: ' + pid + ' 吗？')) return;
+    var btns = document.querySelectorAll('#procTableBody button');
+    btns.forEach(function(b) { b.disabled = true; });
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: 'process_manager.py', args: ['--kill', pid] })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        alert(d.output || '执行完成');
+        window.loadProcess('rss_mb');
+    })
+    .catch(function(e) {
+        alert('❌ 失败: ' + e.message);
+        window.loadProcess('rss_mb');
+    });
+};
+
+window.restartProcess = function(pid) {
+    if (!confirm('确定重启进程 PID: ' + pid + ' 吗？')) return;
+    var btns = document.querySelectorAll('#procTableBody button');
+    btns.forEach(function(b) { b.disabled = true; });
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: 'process_manager.py', args: ['--restart', pid] })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        alert(d.output || '执行完成');
+        window.loadProcess('rss_mb');
+    })
+    .catch(function(e) {
+        alert('❌ 失败: ' + e.message);
+        window.loadProcess('rss_mb');
+    });
+};
 </script>
