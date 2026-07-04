@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# btn: 🧹 清理缓存
+# group: router
+# order: 60
+# action: runSimpleTool:clean_apk_cache.py
 beizhu = "🧹 清理 APK 缓存"
 
 import subprocess, sys
