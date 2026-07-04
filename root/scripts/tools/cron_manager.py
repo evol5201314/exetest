@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# popup: cronModal
 # btn: ⏰ 定时任务
 # group: router
 # order: 30
 # action: runScript:cron_manager.py
+# btn-class: btn-cyan
 beizhu = "⏰ Cron 管理（独立脚本，用完销毁）"
 
 import os, sys, subprocess, argparse, json
