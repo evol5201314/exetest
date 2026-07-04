@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# popup: uploadModal
 # btn: 📤 上传脚本
 # group: script
 # order: 20
