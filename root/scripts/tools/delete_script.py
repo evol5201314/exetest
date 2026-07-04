@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# popup: delModal
+# btn: 🗑 删除脚本
+# group: script
+# order: 40
+# action: runScript:delete_script.py
 beizhu = "🗑️ 删除脚本（支持参数）"
 
 import os, sys, argparse
