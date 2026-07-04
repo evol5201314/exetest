@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# popup: editModal
+# btn: ✏️ 编辑脚本
+# group: script
+# order: 30
+# action: runScript:edit_script.py
 beizhu = "✏️ 编辑脚本（支持参数）"
 
 import os, sys, argparse
