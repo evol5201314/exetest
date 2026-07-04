@@ -31,7 +31,8 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
      # btn: 按钮标题
      # group: script 或 router
      # order: 数字（越小越靠前）
-     # action: runScript:脚本名.py 或 func:函数名
+     # action: runScript:脚本名.py 或 runTool:脚本名.py 或 func:函数名
+     # btn-class: 颜色类名（如 btn-blue, btn-green, btn-red, btn-orange, btn-teal, btn-purple, btn-dark 等）
   2. app.py 会自动扫描生成按钮，无需手动修改 HTML
   3. 新增功能只需添加一个脚本并在 modal_content.html 中定义弹窗，按钮会自动出现
 
@@ -261,6 +262,7 @@ def api_buttons():
         group = 'script'
         order = 99
         action = None
+        btn_class = 'btn-default'   # 默认样式
         
         for line in lines:
             line = line.strip()
@@ -275,13 +277,16 @@ def api_buttons():
                     pass
             elif line.startswith('# action:'):
                 action = line.split(':', 1)[1].strip()
+            elif line.startswith('# btn-class:'):
+                btn_class = line.split(':', 1)[1].strip()
         
         if btn_title and action:
             buttons.setdefault(group, []).append({
                 'title': btn_title,
                 'order': order,
                 'action': action,
-                'file': fn
+                'file': fn,
+                'btnClass': btn_class
             })
     
     for group in buttons:
@@ -388,20 +393,48 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .stat-card .mem-bar{height:100%;border-radius:2px;transition:width 0.3s}
 .actions-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:8px 12px;background:#f8f9fa;border-radius:8px}
 .actions-bar .group-label{font-size:11px;color:#999;font-weight:600;display:flex;align-items:center;margin-right:2px}
-.btn-new{background:#667eea;color:#fff}.btn-new:hover{background:#5a6fd6}
-.btn-upload{background:#4caf50;color:#fff}.btn-upload:hover{background:#43a047}
-.btn-edit{background:#ff9800;color:#fff}.btn-edit:hover{background:#f57c00}
-.btn-del{background:#f44336;color:#fff}.btn-del:hover{background:#d32f2f}
-.btn-log{background:#00897b;color:#fff}.btn-log:hover{background:#00695c}
-.btn-sync{background:#ff6b6b;color:#fff}.btn-sync:hover{background:#e55a5a}
-.btn-gc{background:#607d8b;color:#fff}.btn-gc:hover{background:#455a64}
-.btn-cron{background:#00838f;color:#fff}.btn-cron:hover{background:#006064}
-.btn-kill{background:#7b1fa2;color:#fff}.btn-kill:hover{background:#4a148c}
-.btn-cache{background:#00695c;color:#fff}.btn-cache:hover{background:#004d40}
-.btn-luci{background:#1565c0;color:#fff}.btn-luci:hover{background:#0d47a1}
-.btn-9090{background:#e65100;color:#fff}.btn-9090:hover{background:#bf360c}
-.btn-reboot{background:#c62828;color:#fff}.btn-reboot:hover{background:#b71c1c}
-.btn-proc{background:#00897b;color:#fff}.btn-proc:hover{background:#00695c}
+
+/* ==================== 按钮颜色类 ==================== */
+.btn-default {
+    background: #607d8b;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+}
+.btn-default:hover { background: #455a64; }
+
+.btn-blue { background:#667eea; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-blue:hover { background:#5a6fd6; }
+.btn-green { background:#4caf50; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-green:hover { background:#43a047; }
+.btn-orange { background:#ff9800; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-orange:hover { background:#f57c00; }
+.btn-red { background:#f44336; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-red:hover { background:#d32f2f; }
+.btn-teal { background:#00897b; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-teal:hover { background:#00695c; }
+.btn-pink { background:#ff6b6b; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-pink:hover { background:#e55a5a; }
+.btn-gray { background:#607d8b; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-gray:hover { background:#455a64; }
+.btn-cyan { background:#00838f; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-cyan:hover { background:#006064; }
+.btn-purple { background:#7b1fa2; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-purple:hover { background:#4a148c; }
+.btn-dark-green { background:#00695c; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-dark-green:hover { background:#004d40; }
+.btn-dark-blue { background:#1565c0; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-dark-blue:hover { background:#0d47a1; }
+.btn-deep-orange { background:#e65100; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-deep-orange:hover { background:#bf360c; }
+.btn-dark-red { background:#c62828; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+.btn-dark-red:hover { background:#b71c1c; }
+
+/* ==================== 其他样式保持不变 ==================== */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .card{background:#fff;border-radius:10px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-left:4px solid #ddd}
 .card.idle{border-left-color:#90a4ae}
@@ -465,7 +498,7 @@ select{appearance:auto;background:#fff}
 <div class="stat-card" style="flex:0"><button class="refresh-btn" id="refreshBtn">↻ 刷新</button></div>
 </div>
 
-<!-- 动态按钮容器（之前硬编码的按钮被替换成这两个空容器） -->
+<!-- 动态按钮容器 -->
 <div class="actions-bar" id="scriptBtns"><span class="group-label">📜 脚本</span></div>
 <div class="actions-bar" id="routerBtns"><span class="group-label">⚙️ 路由</span></div>
 
@@ -475,7 +508,7 @@ select{appearance:auto;background:#fff}
 <div class="grid" id="grid"></div>
 </div>
 
-<!-- 工具执行输出弹窗（常驻） -->
+<!-- 工具执行输出弹窗 -->
 <div class="modal" id="toolModal"><div class="modal-box">
 <span class="close" onclick="closeModal('toolModal')">&times;</span>
 <h2 id="toolTitle">工具执行</h2>
@@ -490,7 +523,7 @@ select{appearance:auto;background:#fff}
 
 <script>
 var routerIP = '';
-var modalLoaded = false;
+window.modalLoaded = false;   // 使用 window.modalLoaded 确保全局可读写
 
 function st(s){var map={idle:'待执行',running:'运行中',success:'成功',failed:'失败',timeout:'超时',error:'错误',stopped:'已停止'};return map[s]||s}
 function badge(s){return'<span class="badge '+s+'">'+st(s)+'</span>'}
@@ -612,12 +645,10 @@ function doRunTool(script, args, label) {
     });
 }
 
-function runSimpleTool(script, label) { doRunTool(script, [], label); }
-
 // ========== 通用弹窗加载器（自动调用 init_ 函数） ==========
 function loadModal(name) {
     var container = document.getElementById('modalContainer');
-    if (modalLoaded) {
+    if (window.modalLoaded) {
         document.querySelectorAll('#modalContainer .modal').forEach(function(el) {
             el.style.display = 'none';
         });
@@ -640,7 +671,7 @@ function loadModal(name) {
                 return '';
             });
             container.innerHTML = html;
-            modalLoaded = true;
+            window.modalLoaded = true;
             if (scriptCode) {
                 try { eval(scriptCode); } catch(e) { console.log('弹窗 JS 执行失败:', e); }
             }
@@ -664,25 +695,23 @@ function loadButtons() {
     fetch('/api/buttons')
         .then(r => r.json())
         .then(data => {
-            // 生成脚本管理按钮
             var scriptDiv = document.getElementById('scriptBtns');
             if (scriptDiv && data.script) {
                 data.script.forEach(function(btn) {
                     var b = document.createElement('button');
                     b.textContent = btn.title;
-                    b.className = 'btn-default';  // 可在此处根据 btn.order 设置不同样式类
-                    b.onclick = function() { executeAction(btn.action); };
+                    b.className = btn.btnClass || 'btn-default';
+                    b.onclick = function() { executeAction(btn.action, btn.title); };
                     scriptDiv.appendChild(b);
                 });
             }
-            // 生成路由器工具按钮
             var routerDiv = document.getElementById('routerBtns');
             if (routerDiv && data.router) {
                 data.router.forEach(function(btn) {
                     var b = document.createElement('button');
                     b.textContent = btn.title;
-                    b.className = 'btn-default';
-                    b.onclick = function() { executeAction(btn.action); };
+                    b.className = btn.btnClass || 'btn-default';
+                    b.onclick = function() { executeAction(btn.action, btn.title); };
                     routerDiv.appendChild(b);
                 });
             }
@@ -690,29 +719,25 @@ function loadButtons() {
         .catch(e => console.log('加载按钮失败:', e));
 }
 
-function executeAction(action) {
+function executeAction(action, label) {
     if (action.startsWith('runScript:')) {
         var script = action.split(':')[1];
         runScript(script);
+    } else if (action.startsWith('runTool:')) {
+        var script = action.split(':')[1];
+        doRunTool(script, [], label || script);
     } else if (action.startsWith('func:')) {
         var funcName = action.split(':')[1];
         if (typeof window[funcName] === 'function') {
             window[funcName]();
-        } else {
-            console.log('未定义的函数: ' + funcName);
         }
     }
 }
 
-// 绑定刷新按钮
+// 刷新按钮
 document.getElementById('refreshBtn').onclick = loadAll;
 
-// 绑定其他常驻按钮（重启、跳转等，这些不属于动态脚本，保留硬编码）
-document.getElementById('btnLuci')?.addEventListener('click', function() { window.open('http://' + (routerIP || '192.168.1.1') + '/cgi-bin/luci', '_blank'); });
-document.getElementById('btn9090')?.addEventListener('click', function() { window.open('http://' + (routerIP || '192.168.1.1') + ':9090/ui', '_blank'); });
-document.getElementById('btnReboot')?.addEventListener('click', function() { if (!confirm('重启路由器？')) return; if (!confirm('再次确认？')) return; alert('正在重启...'); fetch('/api/restart_router', { method: 'POST' }); });
-
-// 页面加载完成后执行
+// 页面初始化
 fetchRouterIP();
 loadAll();
 loadButtons();
