@@ -19,8 +19,10 @@ beizhu = "▶ 运行指定脚本（包装脚本，用于显示输出）"
   ================================================================
 """
 import os, sys, subprocess, argparse
+from datetime import datetime
 
 SCRIPTS_DIR = "/root/scripts"
+LOGS_DIR = "/root/scripts/logs"          # 日志文件存放目录
 
 def main():
     parser = argparse.ArgumentParser()
@@ -32,6 +34,9 @@ def main():
         print(f"❌ 脚本 {args.name} 不存在")
         sys.exit(1)
     
+    # 确保日志目录存在
+    os.makedirs(LOGS_DIR, exist_ok=True)
+
     try:
         result = subprocess.run(
             ['python3', script_path],
@@ -43,12 +48,30 @@ def main():
         if result.returncode != 0:
             print(f"⚠️ 脚本退出码: {result.returncode}")
         print(output)
+
+        # ---------- 遵守核心原则：有输出时才写日志文件 ----------
+        if output.strip():
+            log_path = os.path.join(LOGS_DIR, f"{args.name}.log")
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with open(log_path, 'w', encoding='utf-8') as f:
+                f.write(f"=== {timestamp} ===\n{output}")
+        # ------------------------------------------------------------
+
         sys.exit(result.returncode)
+
     except subprocess.TimeoutExpired:
-        print("⏱ 执行超时（300秒）")
+        msg = "⏱ 执行超时（300秒）"
+        print(msg)
+        log_path = os.path.join(LOGS_DIR, f"{args.name}.log")
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write(msg)
         sys.exit(1)
     except Exception as e:
-        print(f"❌ 执行异常: {e}")
+        msg = f"❌ 执行异常: {e}"
+        print(msg)
+        log_path = os.path.join(LOGS_DIR, f"{args.name}.log")
+        with open(log_path, 'w', encoding='utf-8') as f:
+            f.write(msg)
         sys.exit(1)
 
 if __name__ == "__main__":
