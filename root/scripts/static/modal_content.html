@@ -1,24 +1,17 @@
 <!--
 ================================================================
-⚠️ 动态弹窗文件结构说明（重要！后续修改请遵守以下规则）
+⚠️ 通用弹窗规范 - 所有函数必须挂载到 window
 ================================================================
-
 【加载流程】
-  1. 面板调用 loadModal('某个ID')
-  2. fetch 本文件 -> 提取 HTML 放入 modalContainer
-  3. (1, eval) 执行末尾 <script> 中的全部 JS（强制全局作用域）
-  4. 自动查找并调用 init_弹窗ID() 函数
-
-【添加新弹窗步骤】
-  1. 在本文件中添加弹窗 HTML，ID 自定义（如 myModal）
-  2. 在本文件末尾 <script> 中添加业务逻辑函数，并定义 window.init_myModal
-  3. 在 tools/ 下的脚本前15行内加入 # popup: myModal
-  4. 面板会自动调用 window.init_myModal，无需修改 app.py
-
-【关键规范】
-  - 所有初始化函数必须挂载到 window：window.init_弹窗ID = function() { ... }
-  - 关闭函数统一使用 window.closeModalByName('ID')，已全局定义
-  - 进程管理沿用 window.closeProcModal，保持不变
+  1. app.py 调用 loadModal('ID')
+  2. fetch 本文件 -> HTML 放入 modalContainer
+  3. eval 执行本文件全部 JS（函数挂载到 window）
+  4. 自动调用 window.init_ID() 完成初始化
+【新增弹窗步骤】
+  1. 添加弹窗 HTML，ID 为 myModal
+  2. 在 <script> 中添加 window.init_myModal = function(){ ... }
+  3. 在 tools/ 的脚本中写入 # popup: myModal
+  4. 无需修改 app.py
 ================================================================
 -->
 
@@ -29,7 +22,7 @@
 <h2>📝 新建脚本</h2>
 <div style="margin:12px 0"><label>文件名（.py）</label><input type="text" id="newName" placeholder="例如: monitor.py"></div>
 <div><label>代码内容</label><textarea id="newContent" placeholder="# 在此编写 Python 代码"></textarea></div>
-<div class="form-actions"><button class="btn-primary" onclick="createScript()">💾 保存</button><button class="btn-secondary" onclick="window.closeModalByName('newModal')">取消</button></div>
+<div class="form-actions"><button class="btn-primary" onclick="window.createScript()">💾 保存</button><button class="btn-secondary" onclick="window.closeModalByName('newModal')">取消</button></div>
 </div>
 </div>
 
@@ -40,10 +33,10 @@
 <h2>✏️ 编辑脚本</h2>
 <div style="margin:12px 0">
 <label>选择脚本</label>
-<select id="editSelect" onchange="loadEditContent()"></select>
+<select id="editSelect" onchange="window.loadEditContent()"></select>
 </div>
 <div><label>代码内容</label><textarea id="editContent"></textarea></div>
-<div class="form-actions"><button class="btn-primary" onclick="saveEdit()">💾 保存</button><button class="btn-secondary" onclick="window.closeModalByName('editModal')">取消</button></div>
+<div class="form-actions"><button class="btn-primary" onclick="window.saveEdit()">💾 保存</button><button class="btn-secondary" onclick="window.closeModalByName('editModal')">取消</button></div>
 </div>
 </div>
 
@@ -56,7 +49,7 @@
 <label>选择要删除的脚本</label>
 <select id="delSelect"></select>
 </div>
-<div class="form-actions"><button class="btn-danger" onclick="deleteScript()">🗑 确认删除</button><button class="btn-secondary" onclick="window.closeModalByName('delModal')">取消</button></div>
+<div class="form-actions"><button class="btn-danger" onclick="window.deleteScript()">🗑 确认删除</button><button class="btn-secondary" onclick="window.closeModalByName('delModal')">取消</button></div>
 </div>
 </div>
 
@@ -71,7 +64,7 @@
     <div style="font-size:12px;color:#888;margin-top:6px;">💡 只支持 .py 文件，同名文件会被覆盖</div>
 </div>
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
-    <button class="btn-primary" onclick="doUpload()" style="padding:8px 28px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#667eea;color:#fff;font-size:14px;">📤 上传</button>
+    <button class="btn-primary" onclick="window.doUpload()" style="padding:8px 28px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#667eea;color:#fff;font-size:14px;">📤 上传</button>
     <button class="btn-secondary" onclick="window.closeModalByName('uploadModal')" style="padding:8px 20px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;color:#333;font-size:14px;">取消</button>
 </div>
 <pre id="uploadOutput" style="margin-top:12px;background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;display:none;">执行中...</pre>
@@ -118,27 +111,27 @@
 </div>
 </div>
 
-<!-- ====== 定时任务弹窗（请将您原来的完整 cronModal HTML 放在此处） ====== -->
+<!-- ====== 定时任务弹窗（占位，用你自己的替换） ====== -->
 <div class="modal active" id="cronModal" style="display:none;">
 <div class="modal-box" style="max-width:720px;width:94%;">
 <span class="close" onclick="window.closeModalByName('cronModal')">&times;</span>
 <h2>⏰ 定时任务管理</h2>
-<!-- 您的完整 cron 界面代码 -->
+<!-- 你原来的完整 cron HTML -->
 </div>
 </div>
 
-<!-- ====== 进程管理弹窗（请将您原来的完整 procModal HTML 放在此处） ====== -->
+<!-- ====== 进程管理弹窗（占位，用你自己的替换） ====== -->
 <div class="modal active" id="procModal" style="display:none;">
 <div class="modal-box" style="max-width:950px;width:94%;">
 <span class="close" onclick="window.closeProcModal()">&times;</span>
 <h2>📊 进程管理</h2>
-<!-- 您的完整进程管理界面代码 -->
+<!-- 你原来的完整 proc HTML -->
 </div>
 </div>
 
-<!-- ==================== 业务逻辑 JS（所有函数均挂载 window） ==================== -->
+<!-- ==================== 所有业务函数挂载到 window ==================== -->
 <script>
-// 通用弹窗关闭
+// ---------- 通用关闭函数 ----------
 window.closeModalByName = function(name) {
     var el = document.getElementById(name);
     if (el) {
@@ -149,7 +142,7 @@ window.closeModalByName = function(name) {
     }
 };
 
-// ========== 新建脚本 ==========
+// ---------- 新建脚本 ----------
 window.createScript = function() {
     var name = document.getElementById('newName').value.trim();
     var content = document.getElementById('newContent').value;
@@ -159,7 +152,7 @@ window.createScript = function() {
     window.closeModalByName('newModal');
 };
 
-// ========== 编辑脚本 ==========
+// ---------- 编辑脚本 ----------
 window.init_editModal = function() {
     window.populateEditSelect();
 };
@@ -188,7 +181,7 @@ window.saveEdit = function() {
     window.closeModalByName('editModal');
 };
 
-// ========== 删除脚本 ==========
+// ---------- 删除脚本 ----------
 window.init_delModal = function() {
     window.populateDelSelect();
 };
@@ -208,7 +201,7 @@ window.deleteScript = function() {
     window.closeModalByName('delModal');
 };
 
-// ========== 上传脚本 ==========
+// ---------- 上传脚本 ----------
 window.doUpload = function() {
     var input = document.getElementById('uploadFileInput');
     if (!input.files || !input.files.length) { alert('请选择文件'); return; }
@@ -238,7 +231,7 @@ window.doUpload = function() {
     reader.readAsText(file);
 };
 
-// ========== 查看日志 ==========
+// ---------- 查看日志 ----------
 window.init_logModal = function() {
     window.populateLogSelect();
 };
@@ -306,7 +299,7 @@ window.clearAllLogs = function() {
     .catch(e => { alert('操作失败: ' + e.message); });
 };
 
-// ========== 同步 GitHub ==========
+// ---------- 同步 GitHub ----------
 window.init_syncModal = function() {
     window.loadSyncConfig();
 };
@@ -333,13 +326,12 @@ window.doSync = function() {
     doRunTool('sync_github.py', ['--repo', repo], '📥 同步GitHub');
 };
 
-// ========== 定时任务（请将您原来的 cron 函数改为 window.xxx 形式并放在此处） ==========
+// ---------- 定时任务（用你原来的函数，但要改为 window.xxx = function(){}） ----------
 // window.init_cronModal = function() { ... };
-// window.loadScriptsForCron = function() { ... };
-// ...
+// 其他 cron 函数...
 
-// ========== 进程管理（保持您原来完整的 window.xxx 形式） ==========
-// window.init_procModal = function() { ... };
+// ---------- 进程管理（用你原来的函数，必须保持 window.xxx 格式） ----------
+// window.init_procModal = function() { window.loadProcess('rss_mb'); };
 // window.closeProcModal = function() { ... };
 // window.loadProcess = function(sortBy) { ... };
 // ...
