@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# popup: uploadModal
+# btn: 📤 上传脚本
+# group: script
+# order: 20
+# action: runScript:upload_script.py
 beizhu = "📤 上传脚本到 /root/scripts/ (支持base64)"
 
 import os, sys, argparse
