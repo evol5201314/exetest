@@ -6,6 +6,7 @@
 # group: router
 # order: 20
 # action: runScript:process_manager.py
+# btn-class: btn-purple
 beizhu = "📊 进程管理"
 
 import os
