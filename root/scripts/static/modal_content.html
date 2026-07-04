@@ -4,36 +4,28 @@
 ================================================================
 
 【文件用途】
-  本文件由主面板 app.py 动态加载，包含所有弹窗的 HTML 结构和业务逻辑 JS。
-  面板通过 fetch('/static/modal_content.html') 获取整个文件，提取 HTML 插入
-  modalContainer，并 eval 执行末尾的 <script> 中的 JS 代码。
+  本文件由主面板 app.py 的 loadModal() 动态加载。文件内容分为两部分：
+  1. 所有弹窗的 HTML 结构（一个 <div class="modal" id="xxxModal">）
+  2. 末尾一个 <script> 标签，包含所有弹窗的业务逻辑函数
 
-【文件结构】
-  1. 第一部分：一系列弹窗的 HTML 代码（每个弹窗一个 <div class="modal" id="xxxModal">）
-     - 弹窗的 ID 必须与后续 JS 中的初始化函数名对应（如 id="newModal"）
-     - 弹窗的显示/隐藏由 CSS 控制，默认 display:none
-     - 弹窗内的交互元素（按钮、下拉框等）直接绑定 onclick 事件
+【加载流程】
+  1. 面板调用 loadModal('某个ID')
+  2. fetch 本文件 -> 提取 HTML 放入 modalContainer
+  3. eval 执行末尾 <script> 中的全部 JS
+  4. 自动查找并调用 init_弹窗ID() 函数（如果存在）
 
-  2. 第二部分：末尾一个 <script> 标签，包含所有弹窗的业务逻辑 JS 函数
-     - 函数命名规则：populateXxxSelect、loadXxx、clearXxx 等，保持清晰
-     - 弹窗的初始化函数（如果有）命名为 init_弹窗ID（例如 init_newModal），
-       面板加载弹窗时会自动调用（见 app.py 中的 loadModal 逻辑）
-     - 所有调用后端脚本的操作统一通过 /api/run_tool 接口，传入 script 和 args
-     - 函数的作用域必须是全局（window 级别），因为 loadModal 会用 eval 执行
-
-【如何添加新弹窗（请严格遵守）】
-  1. 在 HTML 部分添加一个新的 <div class="modal" id="新ID"> 弹窗结构
-  2. 在末尾 <script> 中编写该弹窗所需的全部 JS 函数
-  3. 如果弹窗需要在打开时自动初始化某些数据，编写一个 init_新ID 函数，
-     并在函数内进行必要的 fetch 和 DOM 操作
-  4. 弹窗 JS 中不要定义全局变量污染命名空间，所有变量用 var 限定在函数内
-  5. 按钮的 onclick 直接指向末尾 <script> 中的全局函数
+【添加新弹窗步骤】
+  1. 在本文件中添加弹窗 HTML，ID 自定义（如 myModal）
+  2. 在本文件末尾 <script> 中添加业务逻辑函数
+  3. 如果有初始化动作（填充下拉框、自动加载数据等），
+     必须定义一个 init_弹窗ID() 函数
+  4. 面板会自动调用 init_弹窗ID，无需修改 app.py
 
 【日志模块特殊说明】
-  - 日志功能由 view_log.py 独立脚本完成，支持 --latest、--name、--clear、--clear-all
-  - 日志弹窗 HTML 中包含“清空当前”和“清空全部”按钮，JS 函数已写在末尾
-  - 日志文件存储在 /root/scripts/logs/，每个脚本一个 .log 文件
-  - 轻量化原则：所有操作通过临时调用 view_log.py 完成，不增加面板常驻内存
+  - 日志功能由 tools/view_log.py 独立脚本完成
+  - 日志文件存储在 /root/scripts/logs/ 下，每个脚本一个 .log
+  - 弹窗中包含「清空当前」「清空全部」按钮
+  - 初始化时自动加载脚本列表并显示最新日志
 
 ================================================================
 -->
@@ -134,7 +126,7 @@
 </div>
 </div>
 
-<!-- ====== 定时任务弹窗 (保留原有完整时间选择器) ====== -->
+<!-- ====== 定时任务弹窗 ====== -->
 <div class="modal active" id="cronModal" style="display:none;">
 <div class="modal-box" style="max-width:720px;width:94%;">
 <span class="close" onclick="closeModalByName('cronModal')">&times;</span>
@@ -184,12 +176,8 @@
         <div style="margin-bottom:6px;">
             <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">每周几执行</label>
             <select id="cronWeeklyDay" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
-                <option value="0">周日</option>
-                <option value="1">周一</option>
-                <option value="2">周二</option>
-                <option value="3">周三</option>
-                <option value="4">周四</option>
-                <option value="5">周五</option>
+                <option value="0">周日</option><option value="1">周一</option><option value="2">周二</option>
+                <option value="3">周三</option><option value="4">周四</option><option value="5">周五</option>
                 <option value="6">周六</option>
             </select>
         </div>
@@ -251,7 +239,6 @@
             <option value="5">5</option><option value="10">10</option><option value="15" selected>15</option>
             <option value="20">20</option><option value="30">30</option><option value="60">60</option>
         </select>分钟执行一次
-        <div style="font-size:12px;color:#888;margin-top:4px;">💡 例如: 选择 15，则每 15 分钟执行一次</div>
     </div>
     <!-- 自定义 -->
     <div id="cronCustom" style="margin-bottom:12px;">
@@ -322,15 +309,14 @@
 
 <!-- ==================== 业务逻辑 JS ==================== -->
 <script>
-// ========== 通用弹窗操作 ==========
+// ========== 通用弹窗关闭函数 ==========
 function closeModalByName(name) {
     var el = document.getElementById(name);
     if (el) {
         el.style.display = 'none';
-        // 清空 modalContainer 防止内存泄漏
         var container = document.getElementById('modalContainer');
         if (container) container.innerHTML = '';
-        modalLoaded = false;
+        modalLoaded = false;  // modalLoaded 由 app.py 定义，这里直接使用
     }
 }
 
@@ -345,6 +331,9 @@ function createScript() {
 }
 
 // ========== 编辑脚本 ==========
+function init_editModal() {
+    populateEditSelect();
+}
 function populateEditSelect() {
     fetch('/api/scripts').then(r => r.json()).then(d => {
         var sel = document.getElementById('editSelect');
@@ -353,7 +342,6 @@ function populateEditSelect() {
         if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; sel.appendChild(opt); });
     }).catch(function() {});
 }
-
 function loadEditContent() {
     var name = document.getElementById('editSelect').value;
     if (!name) return;
@@ -362,7 +350,6 @@ function loadEditContent() {
         document.getElementById('editContent').value = d.content || '';
     }).catch(function() {});
 }
-
 function saveEdit() {
     var name = document.getElementById('editSelect').value;
     var content = document.getElementById('editContent').value;
@@ -373,6 +360,9 @@ function saveEdit() {
 }
 
 // ========== 删除脚本 ==========
+function init_delModal() {
+    populateDelSelect();
+}
 function populateDelSelect() {
     fetch('/api/scripts').then(r => r.json()).then(d => {
         var sel = document.getElementById('delSelect');
@@ -381,7 +371,6 @@ function populateDelSelect() {
         if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; sel.appendChild(opt); });
     }).catch(function() {});
 }
-
 function deleteScript() {
     var name = document.getElementById('delSelect').value;
     if (!name) { alert('请选择脚本'); return; }
@@ -391,6 +380,7 @@ function deleteScript() {
 }
 
 // ========== 上传脚本 ==========
+// 无需特殊初始化，保留函数
 function doUpload() {
     var input = document.getElementById('uploadFileInput');
     if (!input.files || !input.files.length) {
@@ -423,17 +413,17 @@ function doUpload() {
                 input.value = '';
             }
         })
-        .catch(e => {
-            output.textContent = '❌ 上传失败: ' + e.message;
-        });
+        .catch(e => { output.textContent = '❌ 上传失败: ' + e.message; });
     };
     reader.onerror = function() { output.textContent = '❌ 读取文件失败'; };
     reader.readAsText(file);
 }
 
-// ========== 查看日志（新版：支持最新日志、清空当前、清空全部） ==========
+// ========== 查看日志（新版：最新日志、清空当前、清空全部） ==========
+function init_logModal() {
+    populateLogSelect();
+}
 function populateLogSelect() {
-    // 获取所有脚本列表，填充下拉框，并自动加载最新日志
     fetch('/api/run_tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -454,23 +444,20 @@ function populateLogSelect() {
                     sel.appendChild(opt);
                 });
             }
-            loadLog();  // 自动加载最新日志
+            loadLog();
         } catch (e) {}
     })
     .catch(function() {});
 }
-
 function loadLog() {
     var name = document.getElementById('logSelect').value;
     document.getElementById('logContent').textContent = '⏳ 加载中...';
-    
     var args = [];
     if (name) {
         args = ['--name', name];
     } else {
         args = ['--latest'];
     }
-    
     fetch('/api/run_tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -484,7 +471,6 @@ function loadLog() {
         document.getElementById('logContent').textContent = '❌ 加载失败: ' + e.message;
     });
 }
-
 function clearCurrentLog() {
     var name = document.getElementById('logSelect').value;
     if (!name) {
@@ -492,7 +478,6 @@ function clearCurrentLog() {
         return;
     }
     if (!confirm('确定清空 "' + name + '" 的日志吗？')) return;
-    
     fetch('/api/run_tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -501,16 +486,12 @@ function clearCurrentLog() {
     .then(r => r.json())
     .then(d => {
         alert(d.output || '操作完成');
-        loadLog();  // 刷新显示
+        loadLog();
     })
-    .catch(e => {
-        alert('操作失败: ' + e.message);
-    });
+    .catch(e => { alert('操作失败: ' + e.message); });
 }
-
 function clearAllLogs() {
     if (!confirm('⚠️ 确定要清空所有脚本的日志吗？此操作不可恢复！')) return;
-    
     fetch('/api/run_tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -520,14 +501,15 @@ function clearAllLogs() {
     .then(d => {
         alert(d.output || '操作完成');
         loadLog();
-        populateLogSelect();  // 刷新下拉列表
+        populateLogSelect();
     })
-    .catch(e => {
-        alert('操作失败: ' + e.message);
-    });
+    .catch(e => { alert('操作失败: ' + e.message); });
 }
 
 // ========== 同步 GitHub ==========
+function init_syncModal() {
+    loadSyncConfig();
+}
 function loadSyncConfig() {
     fetch('/api/run_tool', {
         method: 'POST',
@@ -544,7 +526,6 @@ function loadSyncConfig() {
         if (input) input.value = 'https://github.com/evol5201314/exetest';
     });
 }
-
 function doSync() {
     var repo = document.getElementById('syncRepoInput').value.trim();
     if (!repo) { alert('请输入仓库地址'); return; }
@@ -553,6 +534,10 @@ function doSync() {
 }
 
 // ========== 定时任务 ==========
+function init_cronModal() {
+    loadScriptsForCron();
+    cronRefreshList();
+}
 function loadScriptsForCron() {
     fetch('/api/scripts').then(r => r.json()).then(d => {
         var sel = document.getElementById('cronCommandSelect');
@@ -561,7 +546,6 @@ function loadScriptsForCron() {
         if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = 'python3 /root/scripts/' + s.name; opt.textContent = s.name; sel.appendChild(opt); });
     }).catch(function() {});
 }
-
 function cronModeChange() {
     document.getElementById('cronDaily').style.display = (document.getElementById('cronMode').value === 'daily') ? 'block' : 'none';
     document.getElementById('cronWeekly').style.display = (document.getElementById('cronMode').value === 'weekly') ? 'block' : 'none';
@@ -570,7 +554,6 @@ function cronModeChange() {
     document.getElementById('cronCustom').style.display = (document.getElementById('cronMode').value === 'custom') ? 'block' : 'none';
     updateCronSchedule();
 }
-
 function updateCronSchedule() {
     var mode = document.getElementById('cronMode').value;
     var schedule = '';
@@ -600,7 +583,6 @@ function updateCronSchedule() {
     }
     document.getElementById('cronSchedule').value = schedule;
 }
-
 function cronRefreshList() {
     var container = document.getElementById('cronListContainer');
     if (!container) return;
@@ -625,14 +607,12 @@ function cronRefreshList() {
         } catch (e) { container.innerHTML = '<div style="color:#f44336;padding:20px;text-align:center;">❌ 解析失败</div>'; }
     }).catch(e => { container.innerHTML = '<div style="color:#f44336;padding:20px;text-align:center;">❌ 加载失败</div>'; });
 }
-
 function cronDelete(fullLine) {
     if (!confirm('确定删除该定时任务吗？')) return;
     fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'cron_manager.py', args: ['--delete', fullLine] }) })
     .then(r => r.json()).then(d => { alert(d.output || '执行完成'); cronRefreshList(); })
     .catch(e => { alert('删除失败: ' + e.message); });
 }
-
 function cronAdd() {
     var mode = document.getElementById('cronMode').value;
     var schedule = '';
@@ -690,7 +670,6 @@ function cronAdd() {
 window.init_procModal = function() {
     window.loadProcess('rss_mb');
 };
-
 window.closeProcModal = function() {
     var el = document.getElementById('procModal');
     if (el) {
@@ -700,7 +679,6 @@ window.closeProcModal = function() {
         modalLoaded = false;
     }
 };
-
 window.loadProcess = function(sortBy) {
     var tbody = document.getElementById('procTableBody');
     if (!tbody) {
@@ -754,7 +732,6 @@ window.loadProcess = function(sortBy) {
         tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#f44336;">❌ 请求失败: ' + e.message + '</td></tr>';
     });
 };
-
 window.killProcess = function(pid) {
     if (!confirm('确定终止进程 PID: ' + pid + ' 吗？')) return;
     var btns = document.querySelectorAll('#procTableBody button');
@@ -774,7 +751,6 @@ window.killProcess = function(pid) {
         window.loadProcess('rss_mb');
     });
 };
-
 window.restartProcess = function(pid) {
     if (!confirm('确定重启进程 PID: ' + pid + ' 吗？')) return;
     var btns = document.querySelectorAll('#procTableBody button');
