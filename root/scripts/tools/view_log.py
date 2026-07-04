@@ -1,11 +1,11 @@
 # popup: logModal
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# popup: logModal
 # btn: 📄 日志
 # group: script
 # order: 50
 # action: runScript:view_log.py
+# btn-class: btn-teal
 beizhu = "📄 查看脚本日志 / 清理日志"
 
 import os, sys, json, argparse
