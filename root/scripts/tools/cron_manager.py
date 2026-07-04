@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# popup: cronModal
 # btn: ⏰ 定时任务
 # group: router
 # order: 30
