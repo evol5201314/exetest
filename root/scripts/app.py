@@ -19,24 +19,21 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
   5. 所有独立脚本放在 /root/scripts/tools/ 目录下
   6. 所有弹窗 HTML 动态加载，不写死在主面板中
 
-【弹窗脚本添加规范】（新增功能请遵守）
-  1. 在 modal_content.html 中添加弹窗 HTML，ID 自定义（如 myModal）
-  2. 在独立脚本第一行行添加 # popup: 弹窗ID（如 # popup: myModal）必须在第一行 否则失效
-  3. 面板点击「运行」时自动识别并弹出窗口，无需修改 app.py
+【弹窗脚本添加规范】（所有功能统一走此规范）
+  1. 在 tools/ 下的脚本前15行内添加 # popup: 弹窗ID 声明
+  2. 在 modal_content.html 中添加对应的弹窗 HTML 和 init_弹窗ID() 函数
+  3. 面板点击脚本卡片或按钮时自动检测 # popup 并弹出窗口，无需修改 app.py
   4. 弹窗的业务逻辑 JS 函数放在 modal_content.html 末尾的 <script> 中
-  5. 弹窗的初始化函数命名为 init_弹窗ID，面板会自动调用
+  5. 初始化函数命名为 init_弹窗ID，面板会自动调用
 
-【面板常驻内存包含】
-  - Bottle 框架 (~1-2 MB)
-  - 脚本列表展示
-  - 内存/缓存显示
-  - 工具调用接口 (/api/run_tool)
-  - 动态加载弹窗的容器（空容器）
-
-【面板常驻内存不包含】
-  - 任何弹窗 HTML（动态加载，用完释放）
-  - 任何独立脚本（点击时启动，用完释放）
-  - 任何业务逻辑代码
+【按钮动态生成规范】
+  1. 在 tools/ 下的脚本前15行内添加：
+     # btn: 按钮标题
+     # group: script 或 router
+     # order: 数字（越小越靠前）
+     # action: runScript:脚本名.py 或 func:函数名
+  2. app.py 会自动扫描生成按钮，无需手动修改 HTML
+  3. 新增功能只需添加一个脚本并在 modal_content.html 中定义弹窗，按钮会自动出现
 
 【已有功能清单】
   ┌─────────────┬──────────────────┬─────────────────────────────┐
@@ -63,9 +60,8 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
   ❌ 不要在主面板中新增常驻内存的业务逻辑
   ❌ 不要在主面板中直接写弹窗 HTML
   ✅ 新增功能请以独立脚本方式实现，通过 /api/run_tool 调用
-  ✅ 新增弹窗请在 modal_content.html 中添加
-  ✅ 弹窗脚本首行使用 # popup: 弹窗ID 标记
-  ✅ 弹窗 JS 函数请放在 modal_content.html 末尾的 <script> 中
+  ✅ 新增弹窗请在 modal_content.html 中添加，脚本中加 # popup 标记
+  ✅ 新增按钮请在脚本中添加 # btn 标记，无需改 app.py
 
 ================================================================
 """
@@ -146,18 +142,14 @@ def get_scripts():
     if not os.path.exists(SCRIPTS_DIR):
         return scripts
     
-    # 🆕 定义黑名单（不显示在面板中的文件）
     EXCLUDE_SCRIPTS = ['bottle.py', 'app.py', '__init__.py']
     
     with open(STATUS_FILE, 'r') as f:
         status_data = json.load(f)
     for fn in sorted(os.listdir(SCRIPTS_DIR)):
         full_path = os.path.join(SCRIPTS_DIR, fn)
-        
-        # 🆕 跳过黑名单中的文件（新增位置在这里）
         if fn in EXCLUDE_SCRIPTS:
             continue
-        
         if fn.endswith('.py') and os.path.isfile(full_path):
             st = os.stat(full_path)
             s = status_data.get(fn, {'status': 'idle', 'pid': None})
@@ -226,7 +218,7 @@ def api_router_ip():
     response.content_type = 'application/json'
     return json.dumps({'ip': get_router_ip()})
 
-# ========== 检查脚本是否为弹窗脚本 ==========
+# ========== 检查脚本是否为弹窗脚本（扫描前10行） ==========
 @route('/api/check_popup/<name>')
 def check_popup(name):
     if '/' in name or '\\' in name:
@@ -238,13 +230,65 @@ def check_popup(name):
             return json.dumps({'popup': None})
     try:
         with open(path, 'r', encoding='utf-8') as f:
-            first_line = f.readline()
-            if first_line.strip().startswith('# popup:'):
-                popup_id = first_line.split(':', 1)[1].strip()
-                return json.dumps({'popup': popup_id})
+            for i, line in enumerate(f):
+                if i >= 10:
+                    break
+                if line.strip().startswith('# popup:'):
+                    popup_id = line.split(':', 1)[1].strip()
+                    return json.dumps({'popup': popup_id})
     except:
         pass
     return json.dumps({'popup': None})
+
+# ========== 获取动态按钮配置 ==========
+@route('/api/buttons')
+def api_buttons():
+    buttons = {'script': [], 'router': []}
+    if not os.path.isdir(TOOLS_DIR):
+        return json.dumps(buttons)
+    
+    for fn in sorted(os.listdir(TOOLS_DIR)):
+        if not fn.endswith('.py'):
+            continue
+        fp = os.path.join(TOOLS_DIR, fn)
+        try:
+            with open(fp, 'r', encoding='utf-8') as f:
+                lines = [f.readline() for _ in range(15)]
+        except:
+            continue
+        
+        btn_title = None
+        group = 'script'
+        order = 99
+        action = None
+        
+        for line in lines:
+            line = line.strip()
+            if line.startswith('# btn:'):
+                btn_title = line.split(':', 1)[1].strip()
+            elif line.startswith('# group:'):
+                group = line.split(':', 1)[1].strip()
+            elif line.startswith('# order:'):
+                try:
+                    order = int(line.split(':', 1)[1].strip())
+                except:
+                    pass
+            elif line.startswith('# action:'):
+                action = line.split(':', 1)[1].strip()
+        
+        if btn_title and action:
+            buttons.setdefault(group, []).append({
+                'title': btn_title,
+                'order': order,
+                'action': action,
+                'file': fn
+            })
+    
+    for group in buttons:
+        buttons[group].sort(key=lambda x: x['order'])
+    
+    response.content_type = 'application/json'
+    return json.dumps(buttons)
 
 # ========== 停止脚本 ==========
 @route('/api/stop/<name>', method='POST')
@@ -343,7 +387,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .stat-card .mem-bar-wrap{width:100%;height:4px;background:#e0e0e0;border-radius:2px;margin-top:6px;overflow:hidden}
 .stat-card .mem-bar{height:100%;border-radius:2px;transition:width 0.3s}
 .actions-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:8px 12px;background:#f8f9fa;border-radius:8px}
-.actions-bar button{padding:6px 14px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500}
 .actions-bar .group-label{font-size:11px;color:#999;font-weight:600;display:flex;align-items:center;margin-right:2px}
 .btn-new{background:#667eea;color:#fff}.btn-new:hover{background:#5a6fd6}
 .btn-upload{background:#4caf50;color:#fff}.btn-upload:hover{background:#43a047}
@@ -388,30 +431,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .btn-run:disabled{opacity:.5;cursor:not-allowed}
 .btn-stop{background:#f44336;color:#fff}.btn-stop:hover{background:#d32f2f}
 .empty{padding:60px 20px;text-align:center;color:#999}
-
-.refresh-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: #fff;
-    border: none;
-    padding: 8px 20px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-    letter-spacing: 0.5px;
-}
-.refresh-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
-    background: linear-gradient(135deg, #5a6fd6 0%, #6a4292 100%);
-}
-.refresh-btn:active {
-    transform: translateY(0px);
-    box-shadow: 0 1px 4px rgba(102, 126, 234, 0.2);
-}
-
+.refresh-btn{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;padding:8px 20px;border-radius:20px;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(102,126,234,0.3);letter-spacing:0.5px}
+.refresh-btn:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(102,126,234,0.4);background:linear-gradient(135deg,#5a6fd6,#6a4292)}
+.refresh-btn:active{transform:translateY(0px);box-shadow:0 1px 4px rgba(102,126,234,0.2)}
 .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;justify-content:center;align-items:center}
 .modal.active{display:flex}
 .modal-box{background:#fff;border-radius:14px;padding:24px;max-width:720px;width:94%;max-height:85vh;overflow-y:auto}
@@ -443,29 +465,9 @@ select{appearance:auto;background:#fff}
 <div class="stat-card" style="flex:0"><button class="refresh-btn" id="refreshBtn">↻ 刷新</button></div>
 </div>
 
-<!-- 按钮组1: 脚本管理 -->
-<div class="actions-bar">
-<span class="group-label">📜 脚本</span>
-<button class="btn-new" id="btnNew">➕ 新建</button>
-<button class="btn-upload" id="btnUpload">📤 上传</button>
-<button class="btn-edit" id="btnEdit">✏️ 编辑</button>
-<button class="btn-del" id="btnDel">🗑 删除</button>
-<button class="btn-log" id="btnLog">📄 日志</button>
-<button class="btn-sync" id="btnSync">📥 同步</button>
-<button class="btn-gc" id="btnGc">🧹 清理脚本</button>
-</div>
-
-<!-- 按钮组2: 路由器工具 -->
-<div class="actions-bar">
-<span class="group-label">⚙️ 路由</span>
-<button class="btn-luci" id="btnLuci">🌐 路由器</button>
-<button class="btn-9090" id="btn9090">🔧 后端</button>
-<button class="btn-cron" id="btnCron">⏰ 定时</button>
-<button class="btn-reboot" id="btnReboot">🔄 重启路由</button>
-<button class="btn-kill" id="btnKill">💣 清理运存</button>
-<button class="btn-cache" id="btnCache">🧹 清理缓存</button>
-<button class="btn-proc" id="btnProc">📊 进程管理</button>
-</div>
+<!-- 动态按钮容器（之前硬编码的按钮被替换成这两个空容器） -->
+<div class="actions-bar" id="scriptBtns"><span class="group-label">📜 脚本</span></div>
+<div class="actions-bar" id="routerBtns"><span class="group-label">⚙️ 路由</span></div>
 
 <!-- 弹窗容器 -->
 <div id="modalContainer"></div>
@@ -473,7 +475,7 @@ select{appearance:auto;background:#fff}
 <div class="grid" id="grid"></div>
 </div>
 
-<!-- 工具执行输出弹窗（常驻，带保持打开开关） -->
+<!-- 工具执行输出弹窗（常驻） -->
 <div class="modal" id="toolModal"><div class="modal-box">
 <span class="close" onclick="closeModal('toolModal')">&times;</span>
 <h2 id="toolTitle">工具执行</h2>
@@ -557,10 +559,6 @@ function runScript(name) {
         .then(function(data) {
             if (data.popup) {
                 loadModal(data.popup);
-                var initFn = window['init_' + data.popup];
-                if (typeof initFn === 'function') {
-                    setTimeout(initFn, 200);
-                }
                 return;
             }
             doRunTool('run_script.py', ['--name', name], '▶ 运行 ' + name);
@@ -616,7 +614,7 @@ function doRunTool(script, args, label) {
 
 function runSimpleTool(script, label) { doRunTool(script, [], label); }
 
-// ========== 通用弹窗加载器（支持自动执行 script） ==========
+// ========== 通用弹窗加载器（自动调用 init_ 函数） ==========
 function loadModal(name) {
     var container = document.getElementById('modalContainer');
     if (modalLoaded) {
@@ -626,421 +624,98 @@ function loadModal(name) {
         var target = document.getElementById(name);
         if (target) {
             target.style.display = 'flex';
-            if (name === 'editModal') populateEditSelect();
-            if (name === 'delModal') populateDelSelect();
-            if (name === 'logModal') populateLogSelect();
-            if (name === 'cronModal') { loadScriptsForCron(); cronRefreshList(); }
-            if (name === 'syncModal') loadSyncConfig();
-            if (name === 'procModal') { setTimeout(function() { loadProcess('rss_mb'); }, 200); }
+            var initFn = window['init_' + name];
+            if (typeof initFn === 'function') {
+                setTimeout(initFn, 100);
+            }
         }
         return;
     }
     fetch('/static/modal_content.html')
         .then(function(r) { return r.text(); })
         .then(function(html) {
-            var tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html;
-            var scripts = tempDiv.querySelectorAll('script');
-            var cleanHtml = html.replace(/<script>[\s\S]*?<\/script>/g, '');
-            
-            container.innerHTML = cleanHtml;
-            modalLoaded = true;
-            
-            scripts.forEach(function(scriptTag) {
-                var code = scriptTag.textContent || scriptTag.innerHTML;
-                try {
-                    eval(code);
-                } catch(e) {
-                    console.log('弹窗 JS 执行失败:', e);
-                }
+            var scriptCode = '';
+            html = html.replace(/<script>([\s\S]*?)<\/script>/g, function(match, code) {
+                scriptCode += code + '\n';
+                return '';
             });
-            
+            container.innerHTML = html;
+            modalLoaded = true;
+            if (scriptCode) {
+                try { eval(scriptCode); } catch(e) { console.log('弹窗 JS 执行失败:', e); }
+            }
             document.querySelectorAll('#modalContainer .modal').forEach(function(el) {
                 el.style.display = 'none';
             });
             var target = document.getElementById(name);
             if (target) {
                 target.style.display = 'flex';
-                if (name === 'editModal') populateEditSelect();
-                if (name === 'delModal') populateDelSelect();
-                if (name === 'logModal') populateLogSelect();
-                if (name === 'cronModal') { loadScriptsForCron(); cronRefreshList(); }
-                if (name === 'syncModal') loadSyncConfig();
-                if (name === 'procModal') { setTimeout(function() { loadProcess('rss_mb'); }, 200); }
+                var initFn = window['init_' + name];
+                if (typeof initFn === 'function') {
+                    setTimeout(initFn, 100);
+                }
             }
         })
         .catch(function(e) { alert('加载模块失败: ' + e.message); });
 }
 
-function closeModalByName(name) {
-    var el = document.getElementById(name);
-    if (el) {
-        el.style.display = 'none';
-        var container = document.getElementById('modalContainer');
-        container.innerHTML = '';
-        modalLoaded = false;
-    }
-}
-
-// ========== 新建脚本 ==========
-document.getElementById('btnNew').onclick = function() { loadModal('newModal'); };
-
-function createScript() {
-    var name = document.getElementById('newName').value.trim();
-    var content = document.getElementById('newContent').value;
-    if (!name) { alert('请输入文件名'); return; }
-    if (!content) { alert('代码内容不能为空'); return; }
-    doRunTool('new_script.py', ['--name', name, '--content', content], '📝 新建脚本');
-    closeModalByName('newModal');
-}
-
-// ========== 编辑脚本 ==========
-document.getElementById('btnEdit').onclick = function() { loadModal('editModal'); };
-
-function populateEditSelect() {
-    fetch('/api/scripts').then(r => r.json()).then(d => {
-        var sel = document.getElementById('editSelect');
-        if (!sel) return;
-        sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
-        if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; sel.appendChild(opt); });
-    }).catch(function() {});
-}
-
-function loadEditContent() {
-    var name = document.getElementById('editSelect').value;
-    if (!name) return;
-    fetch('/api/get/' + encodeURIComponent(name)).then(r => r.json()).then(d => {
-        if (d.error) { alert(d.error); return; }
-        document.getElementById('editContent').value = d.content || '';
-    }).catch(function() {});
-}
-
-function saveEdit() {
-    var name = document.getElementById('editSelect').value;
-    var content = document.getElementById('editContent').value;
-    if (!name) { alert('请选择脚本'); return; }
-    if (!content) { alert('内容不能为空'); return; }
-    doRunTool('edit_script.py', ['--name', name, '--content', content], '✏️ 编辑脚本');
-    closeModalByName('editModal');
-}
-
-// ========== 删除脚本 ==========
-document.getElementById('btnDel').onclick = function() { loadModal('delModal'); };
-
-function populateDelSelect() {
-    fetch('/api/scripts').then(r => r.json()).then(d => {
-        var sel = document.getElementById('delSelect');
-        if (!sel) return;
-        sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
-        if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; sel.appendChild(opt); });
-    }).catch(function() {});
-}
-
-function deleteScript() {
-    var name = document.getElementById('delSelect').value;
-    if (!name) { alert('请选择脚本'); return; }
-    if (!confirm('确定删除 "' + name + '" 吗？')) return;
-    doRunTool('delete_script.py', ['--name', name], '🗑 删除脚本');
-    closeModalByName('delModal');
-}
-
-// ========== 上传脚本 ==========
-document.getElementById('btnUpload').onclick = function() { loadModal('uploadModal'); };
-
-function doUpload() {
-    var input = document.getElementById('uploadFileInput');
-    if (!input.files || !input.files.length) {
-        alert('请选择文件');
-        return;
-    }
-    var file = input.files[0];
-    if (!file.name.endsWith('.py')) {
-        alert('只支持 .py 文件');
-        return;
-    }
-    var output = document.getElementById('uploadOutput');
-    output.style.display = 'block';
-    output.textContent = '⏳ 读取文件...';
-    var reader = new FileReader();
-    reader.onload = function(e) {
-        var content = e.target.result;
-        var base64 = btoa(content);
-        output.textContent = '⏳ 上传中...';
-        fetch('/api/run_tool', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                script: 'upload_script.py',
-                args: ['--filename', file.name, '--content', base64]
-            })
-        })
+// ========== 动态按钮生成 ==========
+function loadButtons() {
+    fetch('/api/buttons')
         .then(r => r.json())
-        .then(d => {
-            output.textContent = d.output || '执行完成';
-            if (d.output && d.output.indexOf('✅') !== -1) {
-                loadAll();
-                input.value = '';
-            }
-        })
-        .catch(e => {
-            output.textContent = '❌ 上传失败: ' + e.message;
-        });
-    };
-    reader.onerror = function() {
-        output.textContent = '❌ 读取文件失败';
-    };
-    reader.readAsText(file);
-}
-
-// ========== 查看日志 ==========
-document.getElementById('btnLog').onclick = function() { loadModal('logModal'); };
-
-function populateLogSelect() {
-    fetch('/api/run_tool', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: 'view_log.py', args: ['--list'] })
-    })
-    .then(r => r.json())
-    .then(d => {
-        try {
-            var list = JSON.parse(d.output);
-            var sel = document.getElementById('logSelect');
-            if (!sel) return;
-            sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
-            if (list && list.length) {
-                list.forEach(function(name) {
-                    var opt = document.createElement('option');
-                    opt.value = name;
-                    opt.textContent = name;
-                    sel.appendChild(opt);
+        .then(data => {
+            // 生成脚本管理按钮
+            var scriptDiv = document.getElementById('scriptBtns');
+            if (scriptDiv && data.script) {
+                data.script.forEach(function(btn) {
+                    var b = document.createElement('button');
+                    b.textContent = btn.title;
+                    b.className = 'btn-default';  // 可在此处根据 btn.order 设置不同样式类
+                    b.onclick = function() { executeAction(btn.action); };
+                    scriptDiv.appendChild(b);
                 });
             }
-        } catch (e) {}
-    })
-    .catch(function() {});
+            // 生成路由器工具按钮
+            var routerDiv = document.getElementById('routerBtns');
+            if (routerDiv && data.router) {
+                data.router.forEach(function(btn) {
+                    var b = document.createElement('button');
+                    b.textContent = btn.title;
+                    b.className = 'btn-default';
+                    b.onclick = function() { executeAction(btn.action); };
+                    routerDiv.appendChild(b);
+                });
+            }
+        })
+        .catch(e => console.log('加载按钮失败:', e));
 }
 
-function loadLog() {
-    var name = document.getElementById('logSelect').value;
-    if (!name) {
-        document.getElementById('logContent').textContent = '请选择脚本';
-        return;
-    }
-    document.getElementById('logContent').textContent = '⏳ 加载中...';
-    fetch('/api/run_tool', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: 'view_log.py', args: ['--name', name] })
-    })
-    .then(r => r.json())
-    .then(d => {
-        document.getElementById('logContent').textContent = d.output || '暂无输出';
-    })
-    .catch(e => {
-        document.getElementById('logContent').textContent = '❌ 加载失败: ' + e.message;
-    });
-}
-
-// ========== 同步 ==========
-document.getElementById('btnSync').onclick = function() { loadModal('syncModal'); };
-
-function loadSyncConfig() {
-    fetch('/api/run_tool', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: 'sync_github.py', args: ['--get-config'] })
-    })
-    .then(r => r.json())
-    .then(d => {
-        var input = document.getElementById('syncRepoInput');
-        if (input) {
-            input.value = d.output.trim() || 'https://github.com/evol5201314/exetest';
+function executeAction(action) {
+    if (action.startsWith('runScript:')) {
+        var script = action.split(':')[1];
+        runScript(script);
+    } else if (action.startsWith('func:')) {
+        var funcName = action.split(':')[1];
+        if (typeof window[funcName] === 'function') {
+            window[funcName]();
+        } else {
+            console.log('未定义的函数: ' + funcName);
         }
-    })
-    .catch(e => {
-        var input = document.getElementById('syncRepoInput');
-        if (input) {
-            input.value = 'https://github.com/evol5201314/exetest';
-        }
-    });
-}
-
-function doSync() {
-    var repo = document.getElementById('syncRepoInput').value.trim();
-    if (!repo) {
-        alert('请输入仓库地址');
-        return;
     }
-    closeModalByName('syncModal');
-    doRunTool('sync_github.py', ['--repo', repo], '📥 同步GitHub');
 }
 
-// ========== 定时任务 ==========
-document.getElementById('btnCron').onclick = function() { loadModal('cronModal'); };
-
-function loadScriptsForCron() {
-    fetch('/api/scripts').then(r => r.json()).then(d => {
-        var sel = document.getElementById('cronCommandSelect');
-        if (!sel) return;
-        sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
-        if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = 'python3 /root/scripts/' + s.name; opt.textContent = s.name; sel.appendChild(opt); });
-    }).catch(function() {});
-}
-
-function cronModeChange() {
-    var mode = document.getElementById('cronMode').value;
-    document.getElementById('cronDaily').style.display = (mode === 'daily') ? 'block' : 'none';
-    document.getElementById('cronWeekly').style.display = (mode === 'weekly') ? 'block' : 'none';
-    document.getElementById('cronHourly').style.display = (mode === 'hourly') ? 'block' : 'none';
-    document.getElementById('cronMinutes').style.display = (mode === 'minutes') ? 'block' : 'none';
-    document.getElementById('cronCustom').style.display = (mode === 'custom') ? 'block' : 'none';
-    updateCronSchedule();
-}
-
-function updateCronSchedule() {
-    var mode = document.getElementById('cronMode').value;
-    var schedule = '';
-    switch (mode) {
-        case 'daily':
-            var hour = document.getElementById('cronDailyHour').value;
-            var minute = document.getElementById('cronDailyMinute').value;
-            schedule = minute + ' ' + hour + ' * * *';
-            break;
-        case 'weekly':
-            var hour = document.getElementById('cronWeeklyHour').value;
-            var minute = document.getElementById('cronWeeklyMinute').value;
-            var day = document.getElementById('cronWeeklyDay').value;
-            schedule = minute + ' ' + hour + ' * * ' + day;
-            break;
-        case 'hourly':
-            var minute = document.getElementById('cronHourlyMinute').value;
-            schedule = minute + ' * * * *';
-            break;
-        case 'minutes':
-            var interval = document.getElementById('cronMinutesInterval').value;
-            schedule = '*/' + interval + ' * * * *';
-            break;
-        case 'custom':
-        default:
-            return;
-    }
-    document.getElementById('cronSchedule').value = schedule;
-}
-
-function cronRefreshList() {
-    var container = document.getElementById('cronListContainer');
-    if (!container) return;
-    container.innerHTML = '<div style="color:#999;padding:20px;text-align:center;">⏳ 加载中...</div>';
-    fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'cron_manager.py', args: ['--list-json'] }) })
-    .then(r => r.json()).then(d => {
-        try {
-            var jobs = JSON.parse(d.output);
-            if (!jobs || !jobs.length) { container.innerHTML = '<div style="color:#999;padding:20px;text-align:center;">📭 暂无定时任务</div>'; return; }
-            var html = '';
-            jobs.forEach(function(job) {
-                var escaped = job.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                var isScript = job.indexOf('/root/scripts/') !== -1 && job.indexOf('.py') !== -1;
-                var label = isScript ? '📜' : '⚙️';
-                var parts = job.split(' ');
-                var schedule = parts.slice(0, 5).join(' ');
-                var cmd = parts.slice(5).join(' ');
-                html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #f0f0f0;">' +
-                    '<span style="font-family:monospace;font-size:13px;color:#333;background:#f5f5f5;padding:2px 10px;border-radius:4px;flex-shrink:0;">' + schedule + '</span>' +
-                    '<span style="font-size:13px;color:#555;word-break:break-all;flex:1;margin:0 10px;">' + label + ' ' + cmd + '</span>' +
-                    '<button onclick="cronDelete(\'' + escaped + '\')" style="background:#f44336;color:#fff;border:none;border-radius:4px;padding:2px 12px;cursor:pointer;font-size:12px;flex-shrink:0;">🗑</button>' +
-                    '</div>';
-            });
-            container.innerHTML = html;
-        } catch (e) { container.innerHTML = '<div style="color:#f44336;padding:20px;text-align:center;">❌ 解析失败</div>'; }
-    }).catch(e => { container.innerHTML = '<div style="color:#f44336;padding:20px;text-align:center;">❌ 加载失败</div>'; });
-}
-
-function cronDelete(fullLine) {
-    if (!confirm('确定删除该定时任务吗？')) return;
-    fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'cron_manager.py', args: ['--delete', fullLine] }) })
-    .then(r => r.json()).then(d => { alert(d.output || '执行完成'); cronRefreshList(); })
-    .catch(e => { alert('删除失败: ' + e.message); });
-}
-
-function cronAdd() {
-    var mode = document.getElementById('cronMode').value;
-    var schedule = '';
-    switch (mode) {
-        case 'daily':
-            var hour = document.getElementById('cronDailyHour').value;
-            var minute = document.getElementById('cronDailyMinute').value;
-            schedule = minute + ' ' + hour + ' * * *';
-            break;
-        case 'weekly':
-            var hour = document.getElementById('cronWeeklyHour').value;
-            var minute = document.getElementById('cronWeeklyMinute').value;
-            var day = document.getElementById('cronWeeklyDay').value;
-            schedule = minute + ' ' + hour + ' * * ' + day;
-            break;
-        case 'hourly':
-            var minute = document.getElementById('cronHourlyMinute').value;
-            schedule = minute + ' * * * *';
-            break;
-        case 'minutes':
-            var interval = document.getElementById('cronMinutesInterval').value;
-            schedule = '*/' + interval + ' * * * *';
-            break;
-        case 'custom':
-        default:
-            schedule = document.getElementById('cronSchedule').value.trim();
-            break;
-    }
-    var cmdSelect = document.getElementById('cronCommandSelect').value;
-    var customCmd = document.getElementById('cronCustomCmd').value.trim();
-    var command = cmdSelect || customCmd;
-    if (!schedule) { alert('请输入执行时间'); return; }
-    if (!command) { alert('请选择脚本或输入自定义命令'); return; }
-    if (schedule.split(/\s+/).length !== 5) {
-        alert('Cron 格式错误，应为: 分 时 日 月 周');
-        return;
-    }
-    fetch('/api/run_tool', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: 'cron_manager.py', args: ['--add', schedule, command] })
-    })
-    .then(r => r.json())
-    .then(d => {
-        alert(d.output || '执行完成');
-        if (d.output && d.output.indexOf('✅') !== -1) {
-            document.getElementById('cronCustomCmd').value = '';
-            cronRefreshList();
-        }
-    })
-    .catch(e => { alert('添加失败: ' + e.message); });
-}
-
-// ========== 进程管理 ==========
-document.getElementById('btnProc').onclick = function() {
-    loadModal('procModal');
-};
-
-// 进程管理函数（在 modal_content.html 中定义，这里只留按钮事件）
-
-// ========== 跳转 ==========
-function goLuci() { window.open('http://' + (routerIP || '192.168.1.1') + '/cgi-bin/luci', '_blank'); }
-function go9090() { window.open('http://' + (routerIP || '192.168.1.1') + ':9090/ui', '_blank'); }
-function rebootRouter() { if (!confirm('重启路由器？')) return; if (!confirm('再次确认？')) return; alert('正在重启...'); fetch('/api/restart_router', { method: 'POST' }); }
-
-// ========== 绑定按钮 ==========
+// 绑定刷新按钮
 document.getElementById('refreshBtn').onclick = loadAll;
-document.getElementById('btnLuci').onclick = goLuci;
-document.getElementById('btn9090').onclick = go9090;
-document.getElementById('btnReboot').onclick = rebootRouter;
-document.getElementById('btnGc').onclick = function() { runSimpleTool('gc_force.py', '🧹 清理脚本'); };
-document.getElementById('btnKill').onclick = function() { runSimpleTool('kill_top_process.py', '💣 清理运存'); };
-document.getElementById('btnCache').onclick = function() { runSimpleTool('clean_apk_cache.py', '🧹 清理缓存'); };
 
-document.getElementById('toolModal').onclick = function(e) { if (e.target === this) closeModal('toolModal'); };
+// 绑定其他常驻按钮（重启、跳转等，这些不属于动态脚本，保留硬编码）
+document.getElementById('btnLuci')?.addEventListener('click', function() { window.open('http://' + (routerIP || '192.168.1.1') + '/cgi-bin/luci', '_blank'); });
+document.getElementById('btn9090')?.addEventListener('click', function() { window.open('http://' + (routerIP || '192.168.1.1') + ':9090/ui', '_blank'); });
+document.getElementById('btnReboot')?.addEventListener('click', function() { if (!confirm('重启路由器？')) return; if (!confirm('再次确认？')) return; alert('正在重启...'); fetch('/api/restart_router', { method: 'POST' }); });
 
+// 页面加载完成后执行
 fetchRouterIP();
 loadAll();
+loadButtons();
 setInterval(loadAll, 10000);
 </script>
 </body></html>
