@@ -21,10 +21,10 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
 
 【弹窗脚本添加规范】（所有功能统一走此规范）
   1. 在 tools/ 下的脚本前15行内添加 # popup: 弹窗ID 声明
-  2. 在 modal_content.html 中添加对应的弹窗 HTML 和 init_弹窗ID() 函数
+  2. 在 modal_content.html 中添加对应的弹窗 HTML 和 window.init_弹窗ID() 函数
   3. 面板点击脚本卡片或按钮时自动检测 # popup 并弹出窗口，无需修改 app.py
   4. 弹窗的业务逻辑 JS 函数放在 modal_content.html 末尾的 <script> 中
-  5. 初始化函数命名为 init_弹窗ID，面板会自动调用
+  5. 初始化函数必须挂载到 window：window.init_弹窗ID = function() { ... }
 
 【按钮动态生成规范】
   1. 在 tools/ 下的脚本前15行内添加：
@@ -32,37 +32,8 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
      # group: script 或 router
      # order: 数字（越小越靠前）
      # action: runScript:脚本名.py 或 runTool:脚本名.py 或 func:函数名
-     # btn-class: 颜色类名（如 btn-blue, btn-green, btn-red, btn-orange, btn-teal, btn-purple, btn-dark 等）
+     # btn-class: 颜色类名（btn-blue, btn-green, btn-red 等）
   2. app.py 会自动扫描生成按钮，无需手动修改 HTML
-  3. 新增功能只需添加一个脚本并在 modal_content.html 中定义弹窗，按钮会自动出现
-
-【已有功能清单】
-  ┌─────────────┬──────────────────┬─────────────────────────────┐
-  │ 功能        │ 实现方式         │ 代码位置                    │
-  ├─────────────┼──────────────────┼─────────────────────────────┤
-  │ 脚本列表    │ 面板常驻         │ app.py                      │
-  │ 运行脚本    │ 独立脚本+动态弹窗 │ tools/run_script.py         │
-  │ 停止脚本    │ 独立脚本         │ tools/stop_script.py        │
-  │ 新建脚本    │ 独立脚本+动态弹窗 │ tools/new_script.py         │
-  │ 编辑脚本    │ 独立脚本+动态弹窗 │ tools/edit_script.py        │
-  │ 删除脚本    │ 独立脚本+动态弹窗 │ tools/delete_script.py      │
-  │ 上传脚本    │ 独立脚本+动态弹窗 │ tools/upload_script.py      │
-  │ 查看日志    │ 独立脚本+动态弹窗 │ tools/view_log.py           │
-  │ 同步GitHub  │ 独立脚本+动态弹窗 │ tools/sync_github.py        │
-  │ 定时任务    │ 独立脚本+动态弹窗 │ tools/cron_manager.py       │
-  │ 清理运存    │ 独立脚本         │ tools/kill_top_process.py   │
-  │ 清理缓存    │ 独立脚本         │ tools/clean_apk_cache.py    │
-  │ 清理脚本(GC)│ 独立脚本         │ tools/gc_force.py           │
-  │ 进程管理    │ 独立脚本+动态弹窗 │ tools/process_manager.py    │
-  └─────────────┴──────────────────┴─────────────────────────────┘
-
-【修改代码时请注意】
-  ❌ 不要将 tools/ 下的独立脚本代码合并到 app.py
-  ❌ 不要在主面板中新增常驻内存的业务逻辑
-  ❌ 不要在主面板中直接写弹窗 HTML
-  ✅ 新增功能请以独立脚本方式实现，通过 /api/run_tool 调用
-  ✅ 新增弹窗请在 modal_content.html 中添加，脚本中加 # popup 标记
-  ✅ 新增按钮请在脚本中添加 # btn 标记，无需改 app.py
 
 ================================================================
 """
@@ -262,7 +233,7 @@ def api_buttons():
         group = 'script'
         order = 99
         action = None
-        btn_class = 'btn-default'   # 默认样式
+        btn_class = 'btn-default'
         
         for line in lines:
             line = line.strip()
@@ -395,18 +366,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .actions-bar .group-label{font-size:11px;color:#999;font-weight:600;display:flex;align-items:center;margin-right:2px}
 
 /* ==================== 按钮颜色类 ==================== */
-.btn-default {
-    background: #607d8b;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 6px 14px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-}
+.btn-default { background: #607d8b; color: #fff; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 500; }
 .btn-default:hover { background: #455a64; }
-
 .btn-blue { background:#667eea; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
 .btn-blue:hover { background:#5a6fd6; }
 .btn-green { background:#4caf50; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
@@ -434,7 +395,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .btn-dark-red { background:#c62828; color:#fff; border:none; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; font-weight:500; }
 .btn-dark-red:hover { background:#b71c1c; }
 
-/* ==================== 其他样式保持不变 ==================== */
+/* ==================== 其他 ==================== */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .card{background:#fff;border-radius:10px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-left:4px solid #ddd}
 .card.idle{border-left-color:#90a4ae}
@@ -498,17 +459,14 @@ select{appearance:auto;background:#fff}
 <div class="stat-card" style="flex:0"><button class="refresh-btn" id="refreshBtn">↻ 刷新</button></div>
 </div>
 
-<!-- 动态按钮容器 -->
 <div class="actions-bar" id="scriptBtns"><span class="group-label">📜 脚本</span></div>
 <div class="actions-bar" id="routerBtns"><span class="group-label">⚙️ 路由</span></div>
 
-<!-- 弹窗容器 -->
 <div id="modalContainer"></div>
 
 <div class="grid" id="grid"></div>
 </div>
 
-<!-- 工具执行输出弹窗 -->
 <div class="modal" id="toolModal"><div class="modal-box">
 <span class="close" onclick="closeModal('toolModal')">&times;</span>
 <h2 id="toolTitle">工具执行</h2>
@@ -523,7 +481,7 @@ select{appearance:auto;background:#fff}
 
 <script>
 var routerIP = '';
-window.modalLoaded = false;   // 使用 window.modalLoaded 确保全局可读写
+window.modalLoaded = false;
 
 function st(s){var map={idle:'待执行',running:'运行中',success:'成功',failed:'失败',timeout:'超时',error:'错误',stopped:'已停止'};return map[s]||s}
 function badge(s){return'<span class="badge '+s+'">'+st(s)+'</span>'}
@@ -645,7 +603,7 @@ function doRunTool(script, args, label) {
     });
 }
 
-// ========== 通用弹窗加载器（自动调用 init_ 函数） ==========
+// ========== 通用弹窗加载器（使用普通 eval，自动调用 window.init_xxx） ==========
 function loadModal(name) {
     var container = document.getElementById('modalContainer');
     if (window.modalLoaded) {
@@ -673,7 +631,7 @@ function loadModal(name) {
             container.innerHTML = html;
             window.modalLoaded = true;
             if (scriptCode) {
-                try { (1, eval)(scriptCode); } catch(e) { ... }
+                try { eval(scriptCode); } catch(e) { console.log('弹窗 JS 执行失败:', e); }
             }
             document.querySelectorAll('#modalContainer .modal').forEach(function(el) {
                 el.style.display = 'none';
@@ -734,10 +692,8 @@ function executeAction(action, label) {
     }
 }
 
-// 刷新按钮
 document.getElementById('refreshBtn').onclick = loadAll;
 
-// 页面初始化
 fetchRouterIP();
 loadAll();
 loadButtons();
