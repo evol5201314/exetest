@@ -12,6 +12,7 @@ beizhu = "⏰ Cron 管理（独立脚本，用完销毁）"
 import os, sys, subprocess, argparse, json
 
 CRONTAB_FILE = "/etc/crontabs/root"
+SCRIPTS_DIR = "/root/scripts"
 
 def list_crons_json():
     if not os.path.exists(CRONTAB_FILE):
@@ -66,10 +67,19 @@ def delete_cron(full_line):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--list-json', action='store_true')
+    parser.add_argument('--list-json', action='store_true', help='列出当前cron任务')
+    parser.add_argument('--list-scripts', action='store_true', help='列出可用脚本')
     parser.add_argument('--add', nargs=2, metavar=('SCHEDULE', 'COMMAND'))
     parser.add_argument('--delete', metavar='LINE')
     args = parser.parse_args()
+
+    if args.list_scripts:
+        if os.path.isdir(SCRIPTS_DIR):
+            scripts = [f for f in os.listdir(SCRIPTS_DIR) if f.endswith('.py') and os.path.isfile(os.path.join(SCRIPTS_DIR, f))]
+            print(json.dumps(scripts))
+        else:
+            print(json.dumps([]))
+        sys.exit(0)
 
     if args.list_json:
         print(json.dumps(list_crons_json()))
