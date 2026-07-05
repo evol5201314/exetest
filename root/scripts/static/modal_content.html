@@ -1,70 +1,73 @@
 <!--
 ================================================================
-⚠️ 动态弹窗文件结构说明（重要！后续修改请遵守以下规则）
+⚠️ 通用弹窗调用规范（新增功能请严格遵守）
 ================================================================
-（保留你原来的注释）
+
+【核心机制】
+  1. 所有弹窗的业务逻辑 JS 全部挂载到 window 对象上。
+  2. 初始化函数统一命名为 window.init_弹窗ID，由 app.py 的 loadModal 自动调用。
+  3. 关闭函数统一使用 window.closeModalByName('弹窗ID')，它只隐藏弹窗，不清空 DOM。
+  4. 弹窗 HTML 的关闭按钮（× 和底部取消/关闭）都必须调用 window.closeModalByName。
+  5. 所有辅助函数（如下拉填充、按钮点击等）也挂载到 window，确保跨作用域访问。
+
+【新增弹窗步骤（仅需两步）】
+  第一步：在本文件中添加弹窗 HTML，ID 为 myModal
+     - 右上角 × 按钮：onclick="window.closeModalByName('myModal')"
+     - 底部关闭按钮：onclick="window.closeModalByName('myModal')"
+  第二步：在末尾 <script> 中添加业务逻辑函数，必须定义 window.init_myModal
+     - 初始化函数：window.init_myModal = function() { ... }
+     - 其他辅助函数：window.myFunc = function() { ... }
+  完成后，在 tools/ 下的脚本前15行内加入 # popup: myModal 即可自动弹出。
+
+【注意事项】
+  - 不要使用普通 function 声明，全部写成 window.xxx = function() {} 形式。
+  - 关闭函数中不要清空 modalContainer 的 innerHTML，否则下次弹窗会失效。
+  - 变量 modalLoaded 在 app.py 中声明，可直接使用（或使用 window.modalLoaded）。
 ================================================================
 -->
 
 <!-- ====== 新建脚本弹窗 ====== -->
-<div class="modal active" id="newModal" style="display:flex;">
+<div class="modal active" id="newModal" style="display:none;">
 <div class="modal-box">
-<span class="close" onclick="closeModalByName('newModal')">&times;</span>
+<span class="close" onclick="window.closeModalByName('newModal')">&times;</span>
 <h2>📝 新建脚本</h2>
 <div style="margin:12px 0"><label>文件名（.py）</label><input type="text" id="newName" placeholder="例如: monitor.py"></div>
 <div><label>代码内容</label><textarea id="newContent" placeholder="# 在此编写 Python 代码"></textarea></div>
-<div class="form-actions"><button class="btn-primary" onclick="createScript()">💾 保存</button><button class="btn-secondary" onclick="closeModalByName('newModal')">取消</button></div>
+<div class="form-actions"><button class="btn-primary" onclick="window.createScript()">💾 保存</button><button class="btn-secondary" onclick="window.closeModalByName('newModal')">取消</button></div>
 </div>
 </div>
 
 <!-- ====== 编辑脚本弹窗 ====== -->
 <div class="modal active" id="editModal" style="display:none;">
 <div class="modal-box">
-<span class="close" onclick="closeModalByName('editModal')">&times;</span>
+<span class="close" onclick="window.closeModalByName('editModal')">&times;</span>
 <h2>✏️ 编辑脚本</h2>
 <div style="margin:12px 0">
 <label>选择脚本</label>
 <select id="editSelect" onchange="window.loadEditContent()"></select>
 </div>
 <div><label>代码内容</label><textarea id="editContent"></textarea></div>
-<div class="form-actions"><button class="btn-primary" onclick="window.saveEdit()">💾 保存</button><button class="btn-secondary" onclick="closeModalByName('editModal')">取消</button></div>
-</div>
-</div>
-
-<!-- ====== 测试弹窗 testModal ====== -->
-<div class="modal active" id="testModal" style="display:none;">
-<div class="modal-box" style="max-width:500px;width:94%;">
-<span class="close" onclick="closeModalByName('testModal')">&times;</span>
-<h2>🧪 弹窗测试成功！</h2>
-<div style="margin:16px 0;padding:16px;background:#f0f7ff;border-radius:8px;border-left:4px solid #667eea;">
-    <p style="font-size:15px;color:#333;">✅ 您的通用弹窗调用机制工作正常！</p>
-    <p style="font-size:13px;color:#666;margin-top:8px;">此弹窗由 <code style="background:#e0e0e0;padding:2px 8px;border-radius:4px;">test_popup.py</code> 触发，<br>通过 <code style="background:#e0e0e0;padding:2px 8px;border-radius:4px;"># popup: testModal</code> 标记自动识别。</p>
-    <p style="font-size:13px;color:#666;margin-top:8px;">🕒 当前时间：<span id="testTimestamp"></span></p>
-</div>
-<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
-    <button class="btn-primary" onclick="closeModalByName('testModal')" style="padding:8px 28px;">👍 知道了</button>
-    <button class="btn-secondary" onclick="closeModalByName('testModal')" style="padding:8px 20px;">关闭</button>
-</div>
+<div class="form-actions"><button class="btn-primary" onclick="window.saveEdit()">💾 保存</button><button class="btn-secondary" onclick="window.closeModalByName('editModal')">取消</button></div>
 </div>
 </div>
 
 <!-- ====== 删除脚本弹窗 ====== -->
 <div class="modal active" id="delModal" style="display:none;">
 <div class="modal-box">
-<span class="close" onclick="closeModalByName('delModal')">&times;</span>
+<span class="close" onclick="window.closeModalByName('delModal')">&times;</span>
 <h2>🗑 删除脚本</h2>
 <div style="margin:12px 0">
 <label>选择要删除的脚本</label>
 <select id="delSelect"></select>
 </div>
-<div class="form-actions"><button class="btn-danger" onclick="window.deleteScript()">🗑 确认删除</button><button class="btn-secondary" onclick="closeModalByName('delModal')">取消</button></div>
+<div class="form-actions"><button class="btn-danger" onclick="window.deleteScript()">🗑 确认删除</button><button class="btn-secondary" onclick="window.closeModalByName('delModal')">取消</button></div>
 </div>
 </div>
 
 <!-- ====== 上传脚本弹窗 ====== -->
 <div class="modal active" id="uploadModal" style="display:none;">
 <div class="modal-box" style="max-width:500px;width:94%;">
-<span class="close" onclick="closeModalByName('uploadModal')">&times;</span>
+<span class="close" onclick="window.closeModalByName('uploadModal')">&times;</span>
 <h2>📤 上传脚本</h2>
 <div style="margin:16px 0;">
     <label style="font-weight:500;font-size:14px;color:#555;display:block;margin-bottom:6px;">选择 .py 文件</label>
@@ -73,16 +76,16 @@
 </div>
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
     <button class="btn-primary" onclick="window.doUpload()" style="padding:8px 28px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#667eea;color:#fff;font-size:14px;">📤 上传</button>
-    <button class="btn-secondary" onclick="closeModalByName('uploadModal')" style="padding:8px 20px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;color:#333;font-size:14px;">取消</button>
+    <button class="btn-secondary" onclick="window.closeModalByName('uploadModal')" style="padding:8px 20px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;color:#333;font-size:14px;">取消</button>
 </div>
 <pre id="uploadOutput" style="margin-top:12px;background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;display:none;">执行中...</pre>
 </div>
 </div>
 
-<!-- ====== 查看日志弹窗 (新版：支持最新日志、清空当前、清空全部) ====== -->
+<!-- ====== 查看日志弹窗 (新版：最新日志、清空当前/全部) ====== -->
 <div class="modal active" id="logModal" style="display:none;">
 <div class="modal-box">
-<span class="close" onclick="closeModalByName('logModal')">&times;</span>
+<span class="close" onclick="window.closeModalByName('logModal')">&times;</span>
 <h2>📄 查看日志</h2>
 <div style="margin:12px 0">
 <label>选择脚本</label>
@@ -96,7 +99,7 @@
         <button class="btn-log" onclick="window.clearCurrentLog()" style="background:#ff9800;color:#fff;border:none;border-radius:6px;padding:5px 16px;cursor:pointer;font-size:13px;">🗑 清空当前</button>
         <button class="btn-log" onclick="window.clearAllLogs()" style="background:#f44336;color:#fff;border:none;border-radius:6px;padding:5px 16px;cursor:pointer;font-size:13px;">🧹 清空全部</button>
     </div>
-    <button class="btn-secondary" onclick="closeModalByName('logModal')" style="padding:6px 20px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;">关闭</button>
+    <button class="btn-secondary" onclick="window.closeModalByName('logModal')" style="padding:6px 20px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;">关闭</button>
 </div>
 </div>
 </div>
@@ -104,7 +107,7 @@
 <!-- ====== 同步脚本弹窗 ====== -->
 <div class="modal active" id="syncModal" style="display:none;">
 <div class="modal-box" style="max-width:600px;width:94%;">
-<span class="close" onclick="closeModalByName('syncModal')">&times;</span>
+<span class="close" onclick="window.closeModalByName('syncModal')">&times;</span>
 <h2>📥 从 GitHub 同步脚本</h2>
 <div style="margin:16px 0;">
     <label style="font-weight:500;font-size:14px;color:#555;display:block;margin-bottom:6px;">仓库地址</label>
@@ -113,16 +116,16 @@
 </div>
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
     <button class="btn-primary" onclick="window.doSync()" style="padding:8px 28px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#667eea;color:#fff;font-size:14px;">📥 开始同步</button>
-    <button class="btn-secondary" onclick="closeModalByName('syncModal')" style="padding:8px 20px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;color:#333;font-size:14px;">取消</button>
+    <button class="btn-secondary" onclick="window.closeModalByName('syncModal')" style="padding:8px 20px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;color:#333;font-size:14px;">取消</button>
 </div>
 <pre id="syncOutput" style="margin-top:12px;background:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:6px;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;display:none;">执行中...</pre>
 </div>
 </div>
 
-<!-- ====== 定时任务弹窗 ====== -->
+<!-- ====== 定时任务弹窗（时间选择器完整保留） ====== -->
 <div class="modal active" id="cronModal" style="display:none;">
 <div class="modal-box" style="max-width:720px;width:94%;">
-<span class="close" onclick="closeModalByName('cronModal')">&times;</span>
+<span class="close" onclick="window.closeModalByName('cronModal')">&times;</span>
 <h2>⏰ 定时任务管理</h2>
 <div style="margin:12px 0;background:#f5f7fa;padding:16px;border-radius:8px;">
     <div style="margin-bottom:12px;">
@@ -258,7 +261,7 @@
     </div>
 </div>
 <div style="margin-top:16px;text-align:right;">
-    <button class="btn-secondary" onclick="closeModalByName('cronModal')" style="padding:6px 24px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;">关闭</button>
+    <button class="btn-secondary" onclick="window.closeModalByName('cronModal')" style="padding:6px 24px;border:none;border-radius:6px;cursor:pointer;font-weight:500;background:#eceff1;">关闭</button>
 </div>
 </div>
 </div>
@@ -300,28 +303,26 @@
 </div>
 </div>
 
-<!-- ==================== 业务逻辑 JS ==================== -->
+<!-- ==================== 业务逻辑 JS（全部挂载到 window） ==================== -->
 <script>
-// ========== 通用弹窗关闭函数 ==========
-function closeModalByName(name) {
+// ========== 通用弹窗关闭（只隐藏，不清空 DOM） ==========
+window.closeModalByName = function(name) {
     var el = document.getElementById(name);
     if (el) {
         el.style.display = 'none';
-        var container = document.getElementById('modalContainer');
-        container.innerHTML = '';
-        modalLoaded = false;
+        // 不清空 modalContainer，不修改 modalLoaded，确保再次打开正常
     }
-}
+};
 
 // ========== 新建脚本 ==========
-function createScript() {
+window.createScript = function() {
     var name = document.getElementById('newName').value.trim();
     var content = document.getElementById('newContent').value;
     if (!name) { alert('请输入文件名'); return; }
     if (!content) { alert('代码内容不能为空'); return; }
     doRunTool('new_script.py', ['--name', name, '--content', content], '📝 新建脚本');
-    closeModalByName('newModal');
-}
+    window.closeModalByName('newModal');
+};
 
 // ========== 编辑脚本 ==========
 window.init_editModal = function() {
@@ -349,7 +350,7 @@ window.saveEdit = function() {
     if (!name) { alert('请选择脚本'); return; }
     if (!content) { alert('内容不能为空'); return; }
     doRunTool('edit_script.py', ['--name', name, '--content', content], '✏️ 编辑脚本');
-    closeModalByName('editModal');
+    window.closeModalByName('editModal');
 };
 
 // ========== 删除脚本 ==========
@@ -369,21 +370,15 @@ window.deleteScript = function() {
     if (!name) { alert('请选择脚本'); return; }
     if (!confirm('确定删除 "' + name + '" 吗？')) return;
     doRunTool('delete_script.py', ['--name', name], '🗑 删除脚本');
-    closeModalByName('delModal');
+    window.closeModalByName('delModal');
 };
 
 // ========== 上传脚本 ==========
 window.doUpload = function() {
     var input = document.getElementById('uploadFileInput');
-    if (!input.files || !input.files.length) {
-        alert('请选择文件');
-        return;
-    }
+    if (!input.files || !input.files.length) { alert('请选择文件'); return; }
     var file = input.files[0];
-    if (!file.name.endsWith('.py')) {
-        alert('只支持 .py 文件');
-        return;
-    }
+    if (!file.name.endsWith('.py')) { alert('只支持 .py 文件'); return; }
     var output = document.getElementById('uploadOutput');
     output.style.display = 'block';
     output.textContent = '⏳ 读取文件...';
@@ -395,30 +390,20 @@ window.doUpload = function() {
         fetch('/api/run_tool', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                script: 'upload_script.py',
-                args: ['--filename', file.name, '--content', base64]
-            })
+            body: JSON.stringify({ script: 'upload_script.py', args: ['--filename', file.name, '--content', base64] })
         })
         .then(r => r.json())
         .then(d => {
             output.textContent = d.output || '执行完成';
-            if (d.output && d.output.indexOf('✅') !== -1) {
-                loadAll();
-                input.value = '';
-            }
+            if (d.output && d.output.indexOf('✅') !== -1) { loadAll(); input.value = ''; }
         })
-        .catch(e => {
-            output.textContent = '❌ 上传失败: ' + e.message;
-        });
+        .catch(e => { output.textContent = '❌ 上传失败: ' + e.message; });
     };
-    reader.onerror = function() {
-        output.textContent = '❌ 读取文件失败';
-    };
+    reader.onerror = function() { output.textContent = '❌ 读取文件失败'; };
     reader.readAsText(file);
 };
 
-// ========== 查看日志（新版：最新日志 + 清空功能） ==========
+// ========== 查看日志（最新日志 + 清空功能） ==========
 window.init_logModal = function() {
     window.populateLogSelect();
 };
@@ -451,31 +436,19 @@ window.populateLogSelect = function() {
 window.loadLog = function() {
     var name = document.getElementById('logSelect').value;
     document.getElementById('logContent').textContent = '⏳ 加载中...';
-    var args = [];
-    if (name) {
-        args = ['--name', name];
-    } else {
-        args = ['--latest'];
-    }
+    var args = name ? ['--name', name] : ['--latest'];
     fetch('/api/run_tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ script: 'view_log.py', args: args })
     })
     .then(r => r.json())
-    .then(d => {
-        document.getElementById('logContent').textContent = d.output || '暂无输出';
-    })
-    .catch(e => {
-        document.getElementById('logContent').textContent = '❌ 加载失败: ' + e.message;
-    });
+    .then(d => { document.getElementById('logContent').textContent = d.output || '暂无输出'; })
+    .catch(e => { document.getElementById('logContent').textContent = '❌ 加载失败: ' + e.message; });
 };
 window.clearCurrentLog = function() {
     var name = document.getElementById('logSelect').value;
-    if (!name) {
-        alert('请先在下拉列表中选择一个具体的脚本（不能选择“最新日志”）');
-        return;
-    }
+    if (!name) { alert('请先选择一个具体的脚本'); return; }
     if (!confirm('确定清空 "' + name + '" 的日志吗？')) return;
     fetch('/api/run_tool', {
         method: 'POST',
@@ -483,10 +456,7 @@ window.clearCurrentLog = function() {
         body: JSON.stringify({ script: 'view_log.py', args: ['--clear', '--name', name] })
     })
     .then(r => r.json())
-    .then(d => {
-        alert(d.output || '操作完成');
-        window.loadLog();
-    })
+    .then(d => { alert(d.output || '操作完成'); window.loadLog(); })
     .catch(e => { alert('操作失败: ' + e.message); });
 };
 window.clearAllLogs = function() {
@@ -497,11 +467,7 @@ window.clearAllLogs = function() {
         body: JSON.stringify({ script: 'view_log.py', args: ['--clear-all'] })
     })
     .then(r => r.json())
-    .then(d => {
-        alert(d.output || '操作完成');
-        window.loadLog();
-        window.populateLogSelect();
-    })
+    .then(d => { alert(d.output || '操作完成'); window.loadLog(); window.populateLogSelect(); })
     .catch(e => { alert('操作失败: ' + e.message); });
 };
 
@@ -518,24 +484,17 @@ window.loadSyncConfig = function() {
     .then(r => r.json())
     .then(d => {
         var input = document.getElementById('syncRepoInput');
-        if (input) {
-            input.value = d.output.trim() || 'https://github.com/evol5201314/exetest';
-        }
+        if (input) input.value = d.output.trim() || 'https://github.com/evol5201314/exetest';
     })
     .catch(e => {
         var input = document.getElementById('syncRepoInput');
-        if (input) {
-            input.value = 'https://github.com/evol5201314/exetest';
-        }
+        if (input) input.value = 'https://github.com/evol5201314/exetest';
     });
 };
 window.doSync = function() {
     var repo = document.getElementById('syncRepoInput').value.trim();
-    if (!repo) {
-        alert('请输入仓库地址');
-        return;
-    }
-    closeModalByName('syncModal');
+    if (!repo) { alert('请输入仓库地址'); return; }
+    window.closeModalByName('syncModal');
     doRunTool('sync_github.py', ['--repo', repo], '📥 同步GitHub');
 };
 
@@ -553,12 +512,11 @@ window.loadScriptsForCron = function() {
     }).catch(function() {});
 };
 window.cronModeChange = function() {
-    var mode = document.getElementById('cronMode').value;
-    document.getElementById('cronDaily').style.display = (mode === 'daily') ? 'block' : 'none';
-    document.getElementById('cronWeekly').style.display = (mode === 'weekly') ? 'block' : 'none';
-    document.getElementById('cronHourly').style.display = (mode === 'hourly') ? 'block' : 'none';
-    document.getElementById('cronMinutes').style.display = (mode === 'minutes') ? 'block' : 'none';
-    document.getElementById('cronCustom').style.display = (mode === 'custom') ? 'block' : 'none';
+    document.getElementById('cronDaily').style.display = (document.getElementById('cronMode').value === 'daily') ? 'block' : 'none';
+    document.getElementById('cronWeekly').style.display = (document.getElementById('cronMode').value === 'weekly') ? 'block' : 'none';
+    document.getElementById('cronHourly').style.display = (document.getElementById('cronMode').value === 'hourly') ? 'block' : 'none';
+    document.getElementById('cronMinutes').style.display = (document.getElementById('cronMode').value === 'minutes') ? 'block' : 'none';
+    document.getElementById('cronCustom').style.display = (document.getElementById('cronMode').value === 'custom') ? 'block' : 'none';
     window.updateCronSchedule();
 };
 window.updateCronSchedule = function() {
@@ -602,16 +560,13 @@ window.cronRefreshList = function() {
             var html = '';
             jobs.forEach(function(job) {
                 var escaped = job.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                var isScript = job.indexOf('/root/scripts/') !== -1 && job.indexOf('.py') !== -1;
-                var label = isScript ? '📜' : '⚙️';
                 var parts = job.split(' ');
-                var schedule = parts.slice(0, 5).join(' ');
+                var schedule = parts.slice(0,5).join(' ');
                 var cmd = parts.slice(5).join(' ');
                 html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #f0f0f0;">' +
                     '<span style="font-family:monospace;font-size:13px;color:#333;background:#f5f5f5;padding:2px 10px;border-radius:4px;flex-shrink:0;">' + schedule + '</span>' +
-                    '<span style="font-size:13px;color:#555;word-break:break-all;flex:1;margin:0 10px;">' + label + ' ' + cmd + '</span>' +
-                    '<button onclick="window.cronDelete(\'' + escaped + '\')" style="background:#f44336;color:#fff;border:none;border-radius:4px;padding:2px 12px;cursor:pointer;font-size:12px;flex-shrink:0;">🗑</button>' +
-                    '</div>';
+                    '<span style="font-size:13px;color:#555;word-break:break-all;flex:1;margin:0 10px;">' + cmd + '</span>' +
+                    '<button onclick="window.cronDelete(\'' + escaped + '\')" style="background:#f44336;color:#fff;border:none;border-radius:4px;padding:2px 12px;cursor:pointer;font-size:12px;flex-shrink:0;">🗑</button></div>';
             });
             container.innerHTML = html;
         } catch (e) { container.innerHTML = '<div style="color:#f44336;padding:20px;text-align:center;">❌ 解析失败</div>'; }
@@ -684,9 +639,7 @@ window.closeProcModal = function() {
     var el = document.getElementById('procModal');
     if (el) {
         el.style.display = 'none';
-        var container = document.getElementById('modalContainer');
-        container.innerHTML = '';
-        modalLoaded = false;
+        // 不清空 DOM，保持后续可用
     }
 };
 window.loadProcess = function(sortBy) {
