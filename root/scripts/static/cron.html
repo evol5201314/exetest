@@ -195,16 +195,41 @@
 ================================================================
 */
 
+// ========== 关闭函数（独立文件必须定义） ==========
+window.closeModalByName = function(name) {
+    var el = document.getElementById(name);
+    if (el) {
+        el.style.display = 'none';
+        var container = document.getElementById('modalContainer');
+        if (container) container.innerHTML = '';
+        modalLoaded = false;
+    }
+};
+
 window.init_cronModal = function() {
     window.loadScriptsForCron();
     window.cronRefreshList();
 };
 window.loadScriptsForCron = function() {
-    fetch('/api/scripts').then(r => r.json()).then(d => {
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: 'cron_manager.py', args: ['--list-scripts'] })
+    })
+    .then(r => r.json())
+    .then(d => {
         var sel = document.getElementById('cronCommandSelect');
         if (!sel) return;
         sel.innerHTML = '<option value="">-- 选择脚本 --</option>';
-        if (d) d.forEach(function(s) { var opt = document.createElement('option'); opt.value = 'python3 /root/scripts/' + s.name; opt.textContent = s.name; sel.appendChild(opt); });
+        var scripts = JSON.parse(d.output);
+        if (scripts && scripts.length) {
+            scripts.forEach(function(s) {
+                var opt = document.createElement('option');
+                opt.value = 'python3 /root/scripts/' + s;
+                opt.textContent = s;
+                sel.appendChild(opt);
+            });
+        }
     }).catch(function() {});
 };
 window.cronModeChange = function() {
