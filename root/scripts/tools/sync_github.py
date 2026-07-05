@@ -83,48 +83,67 @@ def fetch_api(url, token=None):
         return None
 
 def sync_dir(repo_url, target_dir, sub_path=""):
+    """
+    递归同步 sub_path 下的所有 .py 和 .html 文件到 target_dir
+    返回 (success, message)
+    """
     parsed = parse_github_url(repo_url)
     if not parsed:
-        return False, "解析失败"
-    username, repo, token, branch = parsed["username"], parsed["repo"], parsed["token"], parsed["branch"]
-    if sub_path:
-        api_url = f"https://api.github.com/repos/{username}/{repo}/contents/{sub_path}?ref={branch}"
-    else:
-        api_url = f"https://api.github.com/repos/{username}/{repo}/contents?ref={branch}"
-    resp = fetch_api(api_url, token)
-    if resp is None:
-        return False, "API请求失败"
-    try:
-        files = json.loads(resp)
-    except:
-        return False, "JSON解析失败"
-    if isinstance(files, dict) and "message" in files:
-        return False, files["message"]
-    if not isinstance(files, list):
-        return False, "响应格式异常"
-    target_files = [f for f in files if f.get("name", "").endswith(('.py', '.html')) and f.get("type") == "file"]
-    if not target_files:
-        return True, "无 .py 或 .html 文件"
-    os.makedirs(target_dir, exist_ok=True)
-    downloaded = 0
-    for f in target_files:
-        name = f["name"]
-        download_url = f.get("download_url")
-        if not download_url:
-            continue
+        return False, "解析仓库地址失败"
+    username = parsed["username"]
+    repo = parsed["repo"]
+    token = parsed["token"]
+    branch = parsed["branch"]
+
+    downloaded_total = 0
+
+    def walk(remote_path, local_path):
+        nonlocal downloaded_total
+        if remote_path:
+            api_url = f"https://api.github.com/repos/{username}/{repo}/contents/{remote_path}?ref={branch}"
+        else:
+            api_url = f"https://api.github.com/repos/{username}/{repo}/contents?ref={branch}"
+
+        resp = fetch_api(api_url, token)
+        if resp is None:
+            return
         try:
-            req = urllib.request.Request(download_url)
-            if token:
-                req.add_header("Authorization", f"token {token}")
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                content = resp.read().decode("utf-8")
-                path = os.path.join(target_dir, name)
-                with open(path, "w", encoding="utf-8") as out:
-                    out.write(content)
-                downloaded += 1
-        except Exception:
-            pass
-    return True, f"下载 {downloaded} 个文件"
+            items = json.loads(resp)
+        except:
+            return
+        if isinstance(items, dict) and "message" in items:
+            return
+        if not isinstance(items, list):
+            return
+
+        os.makedirs(local_path, exist_ok=True)
+
+        for item in items:
+            item_type = item.get("type")
+            name = item.get("name", "")
+            if item_type == "file" and name.endswith(('.py', '.html')):
+                download_url = item.get("download_url")
+                if not download_url:
+                    continue
+                try:
+                    req = urllib.request.Request(download_url)
+                    if token:
+                        req.add_header("Authorization", f"token {token}")
+                    with urllib.request.urlopen(req, timeout=30) as resp_file:
+                        content = resp_file.read().decode("utf-8")
+                        dest_path = os.path.join(local_path, name)
+                        with open(dest_path, "w", encoding="utf-8") as out:
+                            out.write(content)
+                        downloaded_total += 1
+                except Exception:
+                    pass
+            elif item_type == "dir":
+                new_remote = remote_path + "/" + name if remote_path else name
+                new_local = os.path.join(local_path, name)
+                walk(new_remote, new_local)
+
+    walk(sub_path, target_dir)
+    return True, f"下载 {downloaded_total} 个文件"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -148,12 +167,13 @@ if __name__ == "__main__":
             print("⚠️ 仓库地址保存失败，本次仍使用新地址同步")
 
     print("========================================")
-    print("🐍 GitHub 同步工具")
+    print("🐍 GitHub 同步工具 (递归镜像同步)")
     print(f"🔗 {repo}")
     print("========================================")
-    ok1, msg1 = sync_dir(repo, "/root/scripts", "root/scripts")
-    print(f"📁 /root/scripts/: {msg1}")
-    ok2, msg2 = sync_dir(repo, "/root/scripts/tools", "root/scripts/tools")
-    print(f"📁 /root/scripts/tools/: {msg2}")
+
+    # 只同步一次，递归包含所有子目录
+    ok, msg = sync_dir(repo, "/root/scripts", "root/scripts")
+    print(f"📁 /root/scripts/: {msg}")
+
     print("========================================")
-    sys.exit(0 if ok1 and ok2 else 1)
+    sys.exit(0 if ok else 1)
