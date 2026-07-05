@@ -140,7 +140,7 @@ window.loadProcess = function(sortBy) {
                     '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:500;color:' + cpuColor + ';">' + p.cpu_percent.toFixed(1) + '%</td>' +
                     '<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:500;color:' + memColor + ';">' + p.mem_percent.toFixed(1) + '%</td>' +
                     '<td style="padding:6px 12px;text-align:center;">' +
-                        '<button onclick="window.killProcess(' + p.pid + ')" style="background:#f44336;color:#fff;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;margin-right:4px;">杀</button>' +
+                        '<button onclick="window.killProcess(' + p.pid + ')" style="background:#f44336;color:#fff;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;margin-right:4px;">关闭</button>' +
                         '<button onclick="window.restartProcess(' + p.pid + ')" style="background:#4caf50;color:#fff;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;">重启</button>' +
                     '</td></tr>';
             });
