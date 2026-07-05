@@ -26,7 +26,7 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
   4. 弹窗的业务逻辑 JS 函数放在 modal_content.html 末尾的 <script> 中
   5. 初始化函数必须挂载到 window，确保跨作用域可用
 
-【独立 HTML 弹窗支持】（新增功能，避免 modal_content.html 过大）
+【独立 HTML 弹窗支持】（避免 modal_content.html 过大，以后新弹窗请新建html文件调用）
   1. 在脚本头部添加 # html: 自定义文件名.html
   2. 将自定义 HTML 文件放在 /root/scripts/static/ 目录下
   3. 该文件只需包含一个弹窗的 HTML 和对应的 JS 逻辑（需挂载到 window）
