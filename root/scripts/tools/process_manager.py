@@ -82,7 +82,17 @@ def get_process_info():
             except:
                 pass
 
-            # 已移除过滤面板自身脚本的逻辑，现在可以显示所有进程（包括app.py等）
+            # 如果 cmdline 不为空，使用它的最后一部分作为显示名（通常是脚本名）
+            if cmdline:
+                # 分割 cmdline，取最后一个参数
+                parts = cmdline.split()
+                if parts:
+                    display_name = parts[-1]
+                    # 限制长度
+                    name = display_name[:25]
+            # 否则保持原有的 name（来自 /proc/pid/status）
+
+            # 已移除过滤面板自身脚本的逻辑，现在可以显示所有进程
             # if 'process_manager.py' in cmdline:
             #     continue
 
@@ -149,9 +159,33 @@ def restart_process(pid):
 
     cmdline = str(cmdline)
     try:
+        # 先发送 SIGTERM 礼貌地请求退出
         os.kill(pid, signal.SIGTERM)
-        time.sleep(0.5)
-        # 修复重启卡死：使用 Popen 独立启动，避免阻塞
+
+        # 等待进程退出（最多 3 秒，每 0.2 秒检查一次）
+        waited = 0
+        while waited < 3.0:
+            time.sleep(0.2)
+            waited += 0.2
+            try:
+                os.kill(pid, 0)  # 检查进程是否还存在
+            except OSError:
+                # 进程已退出，可以启动新进程
+                break
+        else:
+            # 3 秒后仍未退出，尝试强制杀死
+            try:
+                os.kill(pid, signal.SIGKILL)
+                time.sleep(0.5)
+                try:
+                    os.kill(pid, 0)
+                    return False, f"❌ 进程 {pid} 无法被杀死"
+                except OSError:
+                    pass  # 已成功杀死
+            except:
+                return False, f"❌ 进程 {pid} 仍在运行且无法强制终止"
+
+        # 启动新进程（使用 Popen 避免阻塞）
         subprocess.Popen(cmdline, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         return True, f"✅ 已重启进程 (PID: {pid})"
     except ProcessLookupError:
