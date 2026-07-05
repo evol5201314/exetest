@@ -1,5 +1,6 @@
 
 # popup: procModal
+# html: proc.html
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # btn: 📊 进程管理
