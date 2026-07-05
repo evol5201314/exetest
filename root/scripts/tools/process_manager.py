@@ -1,4 +1,3 @@
-
 # popup: procModal
 # html: proc.html
 #!/usr/bin/env python3
@@ -17,6 +16,7 @@ import signal
 import glob
 import argparse
 import time
+import subprocess
 
 def get_cpu_times():
     with open('/proc/stat', 'r') as f:
@@ -82,16 +82,17 @@ def get_process_info():
             except:
                 pass
 
-            if 'process_manager.py' in cmdline:
-                continue
+            # 已移除过滤面板自身脚本的逻辑，现在可以显示所有进程（包括app.py等）
+            # if 'process_manager.py' in cmdline:
+            #     continue
 
+            # 修正 CPU 使用率计算（使用系统总时间差近似）
             cpu_percent = 0.0
-            if total_cpu > 0:
-                total_diff = (total2 - total1)
-                if total_diff > 0:
-                    cpu_percent = ((total_cpu / 100) / total_diff) * 100
-                    if cpu_percent > 100:
-                        cpu_percent = 0.0
+            total_system_diff = (total2 - total1)
+            if total_system_diff > 0:
+                cpu_percent = (total_cpu / 100.0) / total_system_diff * 100
+                if cpu_percent > 100:
+                    cpu_percent = 0.0
 
             mem_percent = round((rss_kb / total_mem_kb * 100), 1) if total_mem_kb > 0 else 0
 
@@ -150,7 +151,8 @@ def restart_process(pid):
     try:
         os.kill(pid, signal.SIGTERM)
         time.sleep(0.5)
-        os.system(cmdline + ' &')
+        # 修复重启卡死：使用 Popen 独立启动，避免阻塞
+        subprocess.Popen(cmdline, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         return True, f"✅ 已重启进程 (PID: {pid})"
     except ProcessLookupError:
         return False, f"❌ 进程 {pid} 已不存在"
