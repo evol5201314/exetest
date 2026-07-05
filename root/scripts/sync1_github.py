@@ -12,14 +12,13 @@ beizhu = "📈 独立版：一键同步 GitHub 仓库（镜像同步 /root/scrip
 
 """
 ================================================================
-🐍 GitHub 独立同步工具（镜像同步版）
+🐍 GitHub 独立同步工具（递归镜像同步版）
 ================================================================
 
 【功能】
-  从 GitHub 仓库同步文件到路由器
+  从 GitHub 仓库递归同步所有 .py 和 .html 文件到路由器
   完全镜像仓库结构：
-    - 仓库 /root/scripts/ 子目录 → /root/scripts/
-    - 仓库 /root/scripts/tools/ 子目录 → /root/scripts/tools/
+    - 仓库 /root/scripts/ 目录及其所有子目录 → /root/scripts/
   支持文件类型：.py 和 .html
 
 【依赖】
@@ -31,10 +30,6 @@ beizhu = "📈 独立版：一键同步 GitHub 仓库（镜像同步 /root/scrip
 【使用方法】
   1. 修改下方的 CONFIG（仓库地址、Token）
   2. 运行: python3 sync_github.py
-
-【CONFIG 示例】
-  公开仓库: "repo_url": "https://github.com/用户名/仓库名"
-  私有仓库: "repo_url": "https://token@github.com/用户名/仓库名"
 
 ================================================================
 """
@@ -109,59 +104,75 @@ def fetch_api(url, token=None):
     except Exception:
         return None
 
-def sync_dir(repo_url, target_dir, sub_path=""):
+def sync_dir(repo_url, local_root, remote_subpath=""):
+    """
+    递归同步 remote_subpath 下的所有 .py 和 .html 文件到 local_root
+    返回 (success, message)
+    """
     parsed = parse_github_url(repo_url)
     if not parsed:
-        return False, "解析失败"
+        return False, "解析仓库地址失败"
     username = parsed["username"]
     repo = parsed["repo"]
     token = parsed["token"]
     branch = parsed.get("branch", "main")
 
-    if sub_path:
-        api_url = f"https://api.github.com/repos/{username}/{repo}/contents/{sub_path}?ref={branch}"
-    else:
-        api_url = f"https://api.github.com/repos/{username}/{repo}/contents?ref={branch}"
+    downloaded_total = 0
 
-    resp = fetch_api(api_url, token)
-    if resp is None:
-        return False, "API请求失败"
+    def walk(remote_path, local_path):
+        nonlocal downloaded_total
+        # 构建 API URL
+        if remote_path:
+            api_url = f"https://api.github.com/repos/{username}/{repo}/contents/{remote_path}?ref={branch}"
+        else:
+            api_url = f"https://api.github.com/repos/{username}/{repo}/contents?ref={branch}"
 
-    try:
-        files = json.loads(resp)
-    except Exception:
-        return False, "JSON解析失败"
-
-    if isinstance(files, dict) and "message" in files:
-        return False, files["message"]
-    if not isinstance(files, list):
-        return False, "响应格式异常"
-
-    # 支持 .py 和 .html 文件
-    target_files = [f for f in files if f.get("name", "").endswith(SUPPORTED_EXTS) and f.get("type") == "file"]
-    if not target_files:
-        return True, "无 .py 或 .html 文件"
-
-    os.makedirs(target_dir, exist_ok=True)
-    downloaded = 0
-    for f in target_files:
-        name = f["name"]
-        download_url = f.get("download_url")
-        if not download_url:
-            continue
+        resp = fetch_api(api_url, token)
+        if resp is None:
+            return  # 网络或权限错误，跳过
         try:
-            req = urllib.request.Request(download_url)
-            if token:
-                req.add_header("Authorization", f"token {token}")
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                content = resp.read().decode("utf-8")
-                path = os.path.join(target_dir, name)
-                with open(path, "w", encoding="utf-8") as out:
-                    out.write(content)
-                downloaded += 1
+            items = json.loads(resp)
         except Exception:
-            pass
-    return True, f"下载 {downloaded} 个文件"
+            return  # JSON 解析失败，跳过
+
+        if isinstance(items, dict) and "message" in items:
+            # GitHub API 返回错误信息
+            return
+
+        if not isinstance(items, list):
+            return
+
+        # 确保本地目录存在
+        os.makedirs(local_path, exist_ok=True)
+
+        for item in items:
+            item_type = item.get("type")
+            name = item.get("name", "")
+            if item_type == "file" and name.endswith(SUPPORTED_EXTS):
+                download_url = item.get("download_url")
+                if not download_url:
+                    continue
+                try:
+                    req = urllib.request.Request(download_url)
+                    if token:
+                        req.add_header("Authorization", f"token {token}")
+                    with urllib.request.urlopen(req, timeout=30) as resp_file:
+                        content = resp_file.read().decode("utf-8")
+                        dest_path = os.path.join(local_path, name)
+                        with open(dest_path, "w", encoding="utf-8") as out:
+                            out.write(content)
+                        downloaded_total += 1
+                except Exception:
+                    pass  # 单个文件下载失败不影响整体
+            elif item_type == "dir":
+                # 递归进入子目录
+                new_remote = remote_path + "/" + name if remote_path else name
+                new_local = os.path.join(local_path, name)
+                walk(new_remote, new_local)
+
+    # 开始递归
+    walk(remote_subpath, local_root)
+    return True, f"下载 {downloaded_total} 个文件"
 
 if __name__ == "__main__":
     repo = CONFIG.get("repo_url")
@@ -170,16 +181,13 @@ if __name__ == "__main__":
         sys.exit(1)
 
     print("========================================")
-    print("🐍 GitHub 独立同步工具 (镜像同步)")
+    print("🐍 GitHub 独立同步工具 (递归镜像同步)")
     print(f"支持文件: {', '.join(SUPPORTED_EXTS)}")
     print("========================================")
 
-    ok1, msg1 = sync_dir(repo, "/root/scripts", SUB_PATH)
-    print(f"📁 /root/scripts/: {msg1}")
-
-    tools_sub = f"{SUB_PATH}/tools" if SUB_PATH else "tools"
-    ok2, msg2 = sync_dir(repo, "/root/scripts/tools", tools_sub)
-    print(f"📁 /root/scripts/tools/: {msg2}")
+    # 只同步一次，递归包含所有子目录
+    ok, msg = sync_dir(repo, "/root/scripts", SUB_PATH)
+    print(f"📁 /root/scripts/: {msg}")
 
     print("========================================")
-    sys.exit(0 if ok1 and ok2 else 1)
+    sys.exit(0 if ok else 1)
