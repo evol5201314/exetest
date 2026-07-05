@@ -19,6 +19,7 @@ import time
 import subprocess
 
 def get_cpu_count():
+    """返回 CPU 核心数"""
     try:
         with open('/proc/stat', 'r') as f:
             return sum(1 for line in f if line.startswith('cpu'))
@@ -34,6 +35,7 @@ def get_cpu_times():
     return idle, total
 
 def get_display_name(pid, status_name):
+    """生成适合显示的进程名"""
     cmdline = ''
     try:
         with open(f'/proc/{pid}/cmdline', 'rb') as f:
@@ -42,6 +44,7 @@ def get_display_name(pid, status_name):
     except:
         pass
 
+    # 对 Python 脚本提取文件名
     if status_name == 'python3' and cmdline:
         parts = cmdline.split()
         script = None
@@ -54,12 +57,13 @@ def get_display_name(pid, status_name):
         if len(parts) > 1:
             return parts[1][:25] if parts[1] else 'python3'
         return 'python3'
-    
+
+    # 其他进程优先使用 cmdline 的可执行文件名
     if cmdline:
         executable = cmdline.split()[0] if cmdline else ''
         if executable:
             return os.path.basename(executable)[:25]
-    
+
     return status_name[:25]
 
 def get_process_info():
@@ -136,6 +140,7 @@ def get_process_info():
     return processes
 
 def kill_process(pid):
+    """发送 SIGTERM 终止进程"""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -153,29 +158,8 @@ def kill_process(pid):
     except Exception as e:
         return False, f"❌ 杀进程失败: {e}"
 
-def get_cmdline(pid):
-    """获取指定进程的完整命令行（不含参数分隔符）"""
-    try:
-        with open(f'/proc/{pid}/cmdline', 'rb') as f:
-            return f.read().replace(b'\x00', b' ').decode('utf-8', errors='ignore').strip()
-    except:
-        return ''
-
-def process_exists_with_same_cmdline(target_cmdline):
-    """检查当前系统中是否存在与 target_cmdline 完全相同的进程命令行"""
-    if not target_cmdline:
-        return False
-    for pid_path in glob.glob('/proc/[0-9]*/cmdline'):
-        try:
-            with open(pid_path, 'rb') as f:
-                cmd = f.read().replace(b'\x00', b' ').decode('utf-8', errors='ignore').strip()
-                if cmd == target_cmdline:
-                    return True
-        except:
-            continue
-    return False
-
 def restart_process(pid):
+    """强杀进程（SIGKILL），不做重启"""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -183,52 +167,16 @@ def restart_process(pid):
     except Exception as e:
         return False, f"❌ 检查失败: {e}"
 
-    # 保存原始命令行
-    original_cmdline = get_cmdline(pid)
-    if not original_cmdline:
-        return False, f"❌ 进程 {pid} 命令行为空"
-
-    # 发送 SIGTERM
     try:
-        os.kill(pid, signal.SIGTERM)
-    except Exception as e:
-        return False, f"❌ 发送信号失败: {e}"
-
-    # 等待进程退出（最多 3 秒）
-    waited = 0
-    while waited < 3.0:
-        time.sleep(0.2)
-        waited += 0.2
+        os.kill(pid, signal.SIGKILL)
+        time.sleep(0.3)
         try:
             os.kill(pid, 0)
+            return False, f"❌ 进程 {pid} 未被杀死（可能被保护）"
         except OSError:
-            break
-    else:
-        # 超时后 SIGKILL
-        try:
-            os.kill(pid, signal.SIGKILL)
-            time.sleep(0.5)
-            try:
-                os.kill(pid, 0)
-                return False, f"❌ 进程 {pid} 无法被杀死"
-            except OSError:
-                pass
-        except Exception as e:
-            return False, f"❌ 强制终止失败: {e}"
-
-    # 等待 3 秒，让可能的自动保活机制启动新进程
-    time.sleep(3.0)
-
-    # 检查是否有与原命令行完全相同的进程出现（系统自动重启）
-    if process_exists_with_same_cmdline(original_cmdline):
-        return True, f"✅ 进程已由系统自动重启 (原 PID: {pid})"
-
-    # 没有自动重启，则手动启动
-    try:
-        subprocess.Popen(original_cmdline, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return True, f"✅ 已手动重启进程 (原 PID: {pid})"
+            return True, f"✅ 已强制终止进程 (PID: {pid})"
     except Exception as e:
-        return False, f"❌ 手动重启失败: {e}"
+        return False, f"❌ 强杀失败: {e}"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -237,7 +185,7 @@ if __name__ == "__main__":
     parser.add_argument('--limit', type=int, default=30, help='显示数量')
     parser.add_argument('--json', action='store_true', help='输出 JSON')
     parser.add_argument('--kill', type=int, help='杀死指定 PID')
-    parser.add_argument('--restart', type=int, help='重启指定 PID')
+    parser.add_argument('--restart', type=int, help='强杀指定 PID（不重启）')
     args = parser.parse_args()
 
     if args.kill:
