@@ -6,7 +6,34 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
 ================================================================
 ⚠️ 面板核心原则：轻量化是绝对核心 请勿删除或违反以下规则
 ================================================================
-（...保留你原来的详细注释，此处省略，实际请保留原注释...）
+
+【硬件环境】
+  路由可用内存仅≈30M，精简python3，峰值内存控制最小化
+
+【核心原则】
+  1. 面板本身只保留：脚本列表展示 + 内存/缓存显示
+  2. 所有操作（运行/停止/新建/编辑/删除/上传/日志/同步/定时/清理/进程管理）
+     必须通过「独立脚本」实现，点击时临时启动，执行完毕立即释放内存
+  3. 严禁将任何附属功能的代码合并到主面板 app.py 中
+  4. 主面板 app.py 只负责：路由 + 调用独立脚本 + 显示结果
+  5. 所有独立脚本放在 /root/scripts/tools/ 目录下
+  6. 所有弹窗 HTML 动态加载，不写死在主面板中
+
+【弹窗脚本添加规范】（所有功能统一走此规范）
+  1. 在 tools/ 下的脚本前15行内添加 # popup: 弹窗ID 声明
+  2. 在 modal_content.html 中添加对应的弹窗 HTML 和 window.init_弹窗ID() 函数
+  3. 面板点击脚本卡片或按钮时自动检测 # popup 并弹出窗口，无需修改 app.py
+  4. 所有业务函数必须挂载到 window，确保跨作用域可用
+
+【按钮动态生成规范】
+  1. 在 tools/ 下的脚本前15行内添加：
+     # btn: 按钮标题
+     # group: script 或 router
+     # order: 数字（越小越靠前）
+     # action: runScript:脚本名.py 或 runTool:脚本名.py 或 func:函数名
+     # btn-class: 颜色类名（btn-blue, btn-green, btn-red 等）
+  2. app.py 会自动扫描生成按钮，无需手动修改 HTML
+
 ================================================================
 """
 
@@ -426,7 +453,6 @@ select{appearance:auto;background:#fff}
 <div class="stat-card" style="flex:0"><button class="refresh-btn" id="refreshBtn">↻ 刷新</button></div>
 </div>
 
-<!-- 动态按钮容器 -->
 <div class="actions-bar" id="scriptBtns"><span class="group-label">📜 脚本</span></div>
 <div class="actions-bar" id="routerBtns"><span class="group-label">⚙️ 路由</span></div>
 
@@ -434,7 +460,6 @@ select{appearance:auto;background:#fff}
 <div class="grid" id="grid"></div>
 </div>
 
-<!-- 工具执行输出弹窗 -->
 <div class="modal" id="toolModal"><div class="modal-box">
 <span class="close" onclick="closeModal('toolModal')">&times;</span>
 <h2 id="toolTitle">工具执行</h2>
@@ -518,10 +543,6 @@ function runScript(name) {
         .then(function(data) {
             if (data.popup) {
                 loadModal(data.popup);
-                var initFn = window['init_' + data.popup];
-                if (typeof initFn === 'function') {
-                    setTimeout(initFn, 200);
-                }
                 return;
             }
             doRunTool('run_script.py', ['--name', name], '▶ 运行 ' + name);
@@ -575,7 +596,7 @@ function doRunTool(script, args, label) {
     });
 }
 
-// ========== 通用弹窗加载器（使用 window 函数初始化） ==========
+// ========== 通用弹窗加载器（自动调用 window.init_xxx） ==========
 function loadModal(name) {
     var container = document.getElementById('modalContainer');
     if (modalLoaded) {
@@ -585,66 +606,39 @@ function loadModal(name) {
         var target = document.getElementById(name);
         if (target) {
             target.style.display = 'flex';
-            // 使用 window 函数初始化
-            if (name === 'editModal' && typeof window.init_editModal === 'function') window.init_editModal();
-            if (name === 'delModal' && typeof window.init_delModal === 'function') window.init_delModal();
-            if (name === 'logModal' && typeof window.init_logModal === 'function') window.init_logModal();
-            if (name === 'cronModal') {
-                if (typeof window.init_cronModal === 'function') window.init_cronModal();
+            var initFn = window['init_' + name];
+            if (typeof initFn === 'function') {
+                setTimeout(initFn, 100);
             }
-            if (name === 'syncModal' && typeof window.init_syncModal === 'function') window.init_syncModal();
-            if (name === 'procModal' && typeof window.init_procModal === 'function') window.init_procModal();
         }
         return;
     }
     fetch('/static/modal_content.html')
         .then(function(r) { return r.text(); })
         .then(function(html) {
-            var tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html;
-            var scripts = tempDiv.querySelectorAll('script');
-            var cleanHtml = html.replace(/<script>[\s\S]*?<\/script>/g, '');
-            
-            container.innerHTML = cleanHtml;
-            modalLoaded = true;
-            
-            scripts.forEach(function(scriptTag) {
-                var code = scriptTag.textContent || scriptTag.innerHTML;
-                try {
-                    eval(code);
-                } catch(e) {
-                    console.log('弹窗 JS 执行失败:', e);
-                }
+            var scriptCode = '';
+            html = html.replace(/<script>([\s\S]*?)<\/script>/g, function(match, code) {
+                scriptCode += code + '\n';
+                return '';
             });
-            
+            container.innerHTML = html;
+            modalLoaded = true;
+            if (scriptCode) {
+                try { eval(scriptCode); } catch(e) { console.log('弹窗 JS 执行失败:', e); }
+            }
             document.querySelectorAll('#modalContainer .modal').forEach(function(el) {
                 el.style.display = 'none';
             });
             var target = document.getElementById(name);
             if (target) {
                 target.style.display = 'flex';
-                // 使用 window 函数初始化
-                if (name === 'editModal' && typeof window.init_editModal === 'function') window.init_editModal();
-                if (name === 'delModal' && typeof window.init_delModal === 'function') window.init_delModal();
-                if (name === 'logModal' && typeof window.init_logModal === 'function') window.init_logModal();
-                if (name === 'cronModal') {
-                    if (typeof window.init_cronModal === 'function') window.init_cronModal();
+                var initFn = window['init_' + name];
+                if (typeof initFn === 'function') {
+                    setTimeout(initFn, 100);
                 }
-                if (name === 'syncModal' && typeof window.init_syncModal === 'function') window.init_syncModal();
-                if (name === 'procModal' && typeof window.init_procModal === 'function') window.init_procModal();
             }
         })
         .catch(function(e) { alert('加载模块失败: ' + e.message); });
-}
-
-function closeModalByName(name) {
-    var el = document.getElementById(name);
-    if (el) {
-        el.style.display = 'none';
-        var container = document.getElementById('modalContainer');
-        container.innerHTML = '';
-        modalLoaded = false;
-    }
 }
 
 // ========== 动态按钮生成 ==========
