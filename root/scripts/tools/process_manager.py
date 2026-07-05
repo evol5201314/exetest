@@ -18,6 +18,13 @@ import argparse
 import time
 import subprocess
 
+def get_cpu_count():
+    try:
+        with open('/proc/stat', 'r') as f:
+            return sum(1 for line in f if line.startswith('cpu'))
+    except:
+        return 1
+
 def get_cpu_times():
     with open('/proc/stat', 'r') as f:
         line = f.readline()
@@ -25,6 +32,35 @@ def get_cpu_times():
     idle = int(parts[4])
     total = sum(int(p) for p in parts[1:])
     return idle, total
+
+def get_display_name(pid, status_name):
+    cmdline = ''
+    try:
+        with open(f'/proc/{pid}/cmdline', 'rb') as f:
+            data = f.read().replace(b'\x00', b' ').decode('utf-8', errors='ignore').strip()
+            cmdline = data
+    except:
+        pass
+
+    if status_name == 'python3' and cmdline:
+        parts = cmdline.split()
+        script = None
+        for p in parts[1:]:
+            if not p.startswith('-') and p.endswith('.py'):
+                script = p
+                break
+        if script:
+            return os.path.basename(script)[:25]
+        if len(parts) > 1:
+            return parts[1][:25] if parts[1] else 'python3'
+        return 'python3'
+    
+    if cmdline:
+        executable = cmdline.split()[0] if cmdline else ''
+        if executable:
+            return os.path.basename(executable)[:25]
+    
+    return status_name[:25]
 
 def get_process_info():
     processes = []
@@ -41,6 +77,7 @@ def get_process_info():
     idle1, total1 = get_cpu_times()
     time.sleep(0.1)
     idle2, total2 = get_cpu_times()
+    cpu_count = get_cpu_count()
 
     for pid_path in glob.glob('/proc/[0-9]*/status'):
         try:
@@ -48,13 +85,13 @@ def get_process_info():
             if pid <= 10:
                 continue
 
-            name = ''
+            status_name = ''
             with open(pid_path, 'r') as f:
                 for line in f:
                     if line.startswith('Name:'):
-                        name = line.split(':', 1)[1].strip()
+                        status_name = line.split(':', 1)[1].strip()
                         break
-            if not name or name.startswith('['):
+            if not status_name or status_name.startswith('['):
                 continue
 
             rss_kb = 0
@@ -75,32 +112,12 @@ def get_process_info():
             except:
                 total_cpu = 0
 
-            cmdline = ''
-            try:
-                with open(f'/proc/{pid}/cmdline', 'rb') as f:
-                    cmdline = f.read().replace(b'\x00', b' ').decode('utf-8', errors='ignore').strip()
-            except:
-                pass
+            display_name = get_display_name(pid, status_name)
 
-            # 如果 cmdline 不为空，使用它的最后一部分作为显示名（通常是脚本名）
-            if cmdline:
-                # 分割 cmdline，取最后一个参数
-                parts = cmdline.split()
-                if parts:
-                    display_name = parts[-1]
-                    # 限制长度
-                    name = display_name[:25]
-            # 否则保持原有的 name（来自 /proc/pid/status）
-
-            # 已移除过滤面板自身脚本的逻辑，现在可以显示所有进程
-            # if 'process_manager.py' in cmdline:
-            #     continue
-
-            # 修正 CPU 使用率计算（使用系统总时间差近似）
             cpu_percent = 0.0
             total_system_diff = (total2 - total1)
-            if total_system_diff > 0:
-                cpu_percent = (total_cpu / 100.0) / total_system_diff * 100
+            if total_system_diff > 0 and cpu_count > 0:
+                cpu_percent = (total_cpu / total_system_diff) * 100.0 / cpu_count
                 if cpu_percent > 100:
                     cpu_percent = 0.0
 
@@ -108,11 +125,11 @@ def get_process_info():
 
             processes.append({
                 'pid': pid,
-                'name': name[:30],
+                'name': display_name,
                 'rss_mb': round(rss_kb / 1024, 2),
                 'mem_percent': mem_percent,
                 'cpu_percent': round(cpu_percent, 1),
-                'cmdline': cmdline[:80] if cmdline else name
+                'cmdline': display_name
             })
         except:
             continue
@@ -136,6 +153,28 @@ def kill_process(pid):
     except Exception as e:
         return False, f"❌ 杀进程失败: {e}"
 
+def get_cmdline(pid):
+    """获取指定进程的完整命令行（不含参数分隔符）"""
+    try:
+        with open(f'/proc/{pid}/cmdline', 'rb') as f:
+            return f.read().replace(b'\x00', b' ').decode('utf-8', errors='ignore').strip()
+    except:
+        return ''
+
+def process_exists_with_same_cmdline(target_cmdline):
+    """检查当前系统中是否存在与 target_cmdline 完全相同的进程命令行"""
+    if not target_cmdline:
+        return False
+    for pid_path in glob.glob('/proc/[0-9]*/cmdline'):
+        try:
+            with open(pid_path, 'rb') as f:
+                cmd = f.read().replace(b'\x00', b' ').decode('utf-8', errors='ignore').strip()
+                if cmd == target_cmdline:
+                    return True
+        except:
+            continue
+    return False
+
 def restart_process(pid):
     try:
         os.kill(pid, 0)
@@ -144,56 +183,52 @@ def restart_process(pid):
     except Exception as e:
         return False, f"❌ 检查失败: {e}"
 
-    try:
-        with open(f'/proc/{pid}/cmdline', 'rb') as f:
-            cmdline_bytes = f.read()
-        if not cmdline_bytes:
-            return False, f"❌ 进程 {pid} 命令行为空"
-        cmdline = cmdline_bytes.replace(b'\x00', b' ').decode('utf-8', errors='ignore').strip()
-        if not cmdline:
-            return False, f"❌ 进程 {pid} 命令行解析为空"
-    except FileNotFoundError:
-        return False, f"❌ 进程 {pid} 已不存在"
-    except Exception as e:
-        return False, f"❌ 读取命令失败: {e}"
+    # 保存原始命令行
+    original_cmdline = get_cmdline(pid)
+    if not original_cmdline:
+        return False, f"❌ 进程 {pid} 命令行为空"
 
-    cmdline = str(cmdline)
+    # 发送 SIGTERM
     try:
-        # 先发送 SIGTERM 礼貌地请求退出
         os.kill(pid, signal.SIGTERM)
-
-        # 等待进程退出（最多 3 秒，每 0.2 秒检查一次）
-        waited = 0
-        while waited < 3.0:
-            time.sleep(0.2)
-            waited += 0.2
-            try:
-                os.kill(pid, 0)  # 检查进程是否还存在
-            except OSError:
-                # 进程已退出，可以启动新进程
-                break
-        else:
-            # 3 秒后仍未退出，尝试强制杀死
-            try:
-                os.kill(pid, signal.SIGKILL)
-                time.sleep(0.5)
-                try:
-                    os.kill(pid, 0)
-                    return False, f"❌ 进程 {pid} 无法被杀死"
-                except OSError:
-                    pass  # 已成功杀死
-            except:
-                return False, f"❌ 进程 {pid} 仍在运行且无法强制终止"
-
-        # 启动新进程（使用 Popen 避免阻塞）
-        subprocess.Popen(cmdline, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-        return True, f"✅ 已重启进程 (PID: {pid})"
-    except ProcessLookupError:
-        return False, f"❌ 进程 {pid} 已不存在"
-    except PermissionError:
-        return False, f"❌ 权限不足"
     except Exception as e:
-        return False, f"❌ 重启失败: {e}"
+        return False, f"❌ 发送信号失败: {e}"
+
+    # 等待进程退出（最多 3 秒）
+    waited = 0
+    while waited < 3.0:
+        time.sleep(0.2)
+        waited += 0.2
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            break
+    else:
+        # 超时后 SIGKILL
+        try:
+            os.kill(pid, signal.SIGKILL)
+            time.sleep(0.5)
+            try:
+                os.kill(pid, 0)
+                return False, f"❌ 进程 {pid} 无法被杀死"
+            except OSError:
+                pass
+        except Exception as e:
+            return False, f"❌ 强制终止失败: {e}"
+
+    # 等待 3 秒，让可能的自动保活机制启动新进程
+    time.sleep(3.0)
+
+    # 检查是否有与原命令行完全相同的进程出现（系统自动重启）
+    if process_exists_with_same_cmdline(original_cmdline):
+        return True, f"✅ 进程已由系统自动重启 (原 PID: {pid})"
+
+    # 没有自动重启，则手动启动
+    try:
+        subprocess.Popen(original_cmdline, shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True, f"✅ 已手动重启进程 (原 PID: {pid})"
+    except Exception as e:
+        return False, f"❌ 手动重启失败: {e}"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
