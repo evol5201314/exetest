@@ -270,9 +270,13 @@ def run_tool():
         response.status = 400; return json.dumps({'error':'不安全的脚本名'})
     if script == 'kill_top_process.py' and '--exclude' not in str(args):
         args = ['--exclude', str(os.getpid())] + args
+    # 优先从 tools/ 查找，找不到再去 scripts/ 查找
     script_path = os.path.join(TOOLS_DIR, script)
     if not os.path.exists(script_path):
-        response.status = 404; return json.dumps({'error': f'工具脚本 {script} 不存在'})
+        script_path = os.path.join(SCRIPTS_DIR, script)
+        if not os.path.exists(script_path):
+            response.status = 404
+            return json.dumps({'error': f'工具脚本 {script} 不存在'})
     try:
         cmd = ['python3', script_path] + [str(a) for a in args]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -284,16 +288,7 @@ def run_tool():
         response.status = 500; return json.dumps({'output':'⏱ 执行超时（300秒）'})
     except Exception as e:
         response.status = 500; return json.dumps({'output': f'❌ 执行失败: {e}'})
-
-@route('/api/restart_router', method='POST')
-def restart_router():
-    try:
-        subprocess.Popen(['reboot'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        response.content_type = 'application/json'
-        return json.dumps({'message':'✅ 路由器正在重启...'})
-    except Exception as e:
-        response.status = 500; return json.dumps({'error': str(e)})
-
+      
 # ==================== HTML 模板 ====================
 HTML = r'''
 <!DOCTYPE html>
