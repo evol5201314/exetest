@@ -6,17 +6,56 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
 ================================================================
 ⚠️ 面板核心原则：轻量化是绝对核心 请勿删除或违反以下规则
 ================================================================
-（...保留你原来的详细注释，此处省略，实际请保留原注释...）
+
+【硬件环境】
+  路由可用内存仅≈30M，精简python3，峰值内存控制最小化
+
+【核心原则】
+  1. 面板本身只保留：脚本列表展示 + 内存/缓存显示
+  2. 所有操作（运行/停止/新建/编辑/删除/上传/日志/同步/定时/清理/进程管理）
+     必须通过「独立脚本」实现，点击时临时启动，执行完毕立即释放内存
+  3. 严禁将任何附属功能的代码合并到主面板 app.py 中
+  4. 主面板 app.py 只负责：路由 + 调用独立脚本 + 显示结果
+  5. 所有独立脚本放在 /root/scripts/tools/ 目录下
+  6. 所有弹窗 HTML 动态加载，不写死在主面板中
+
+【弹窗脚本添加规范】（所有功能统一走此规范）
+  1. 在 tools/ 下的脚本前10行内添加 # popup: 弹窗ID 声明
+  2. 在 modal_content.html 中添加对应的弹窗 HTML 和 window.init_弹窗ID() 函数
+  3. 面板点击脚本卡片或按钮时自动检测 # popup 并弹出窗口，无需修改 app.py
+  4. 弹窗的业务逻辑 JS 函数放在 modal_content.html 末尾的 <script> 中
+  5. 初始化函数必须挂载到 window，确保跨作用域可用
+
+【独立 HTML 弹窗支持】（新增功能，避免 modal_content.html 过大）
+  1. 在脚本头部添加 # html: 自定义文件名.html
+  2. 将自定义 HTML 文件放在 /root/scripts/static/ 目录下
+  3. 该文件只需包含一个弹窗的 HTML 和对应的 JS 逻辑（需挂载到 window）
+  4. 系统会自动加载该文件，无需修改 app.py
+  5. 若不指定 # html，则默认使用 modal_content.html
+
+【按钮动态生成规范】
+  1. 在 tools/ 下的脚本前15行内添加：
+     # btn: 按钮标题
+     # group: script 或 router
+     # order: 数字（越小越靠前）
+     # action: runScript:脚本名.py 或 runTool:脚本名.py 或 func:函数名
+     # btn-class: 颜色类名（btn-blue, btn-green, btn-red 等）
+  2. app.py 会自动扫描生成按钮，无需手动修改 HTML
+
+【弹窗调用完整链路】
+  1. 用户点击按钮/脚本卡片 → runScript('脚本名.py')
+  2. runScript 调用 /api/check_popup/脚本名.py
+  3. 后端扫描脚本前10行，返回 {popup: "弹窗ID", html: "自定义文件名.html(可选)"}
+  4. 如果有 popup，调用 loadModal(popupID, htmlFile)
+  5. loadModal 根据 htmlFile 决定加载哪个 HTML 文件（默认 modal_content.html）
+  6. 加载 HTML 并 eval 其中的 JS，将函数挂载到 window
+  7. 自动调用 window.init_弹窗ID() 完成初始化
+  8. 后续打开同一弹窗只切换显示/隐藏，并重新调用 init 函数
+
 ================================================================
 """
 
-import os
-import sys
-import json
-import subprocess
-import signal
-import gc
-import re
+import os, sys, json, subprocess, signal, gc, re
 from datetime import datetime
 from bottle import Bottle, route, run, request, response, static_file
 
@@ -38,66 +77,52 @@ def extract_beizhu(fp):
     try:
         with open(fp, 'r', encoding='utf-8') as f:
             for i, line in enumerate(f):
-                if i >= 20:
-                    break
+                if i >= 20: break
                 if line.strip().startswith('beizhu ='):
                     v = line.split('=', 1)[1].strip()
                     if v.startswith('"') and v.endswith('"'): return v[1:-1]
                     if v.startswith("'") and v.endswith("'"): return v[1:-1]
                     return v
-    except:
-        pass
+    except: pass
     return None
 
 def get_meminfo():
     try:
-        with open('/proc/meminfo', 'r') as f:
-            lines = f.readlines()
+        with open('/proc/meminfo', 'r') as f: lines = f.readlines()
         mem = {}
         for line in lines:
-            if ':' in line:
-                k, v = line.split(':', 1)
-                mem[k] = int(v.strip().split()[0])
+            if ':' in line: k, v = line.split(':', 1); mem[k] = int(v.strip().split()[0])
         total = mem.get('MemTotal', 0)
         avail = mem.get('MemAvailable', mem.get('MemFree', 0))
         used = total - avail if total > avail else 0
-        return {'total_kb': total, 'used_kb': used, 'available_kb': avail,
-                'percent': round((used / total * 100) if total > 0 else 0, 1)}
-    except:
-        return {'total_kb': 0, 'used_kb': 0, 'available_kb': 0, 'percent': 0}
+        return {'total_kb': total, 'used_kb': used, 'available_kb': avail, 'percent': round((used/total*100) if total>0 else 0, 1)}
+    except: return {'total_kb':0, 'used_kb':0, 'available_kb':0, 'percent':0}
 
 def get_apk_cache_size():
     cache_dir = "/var/cache/apk/"
-    if not os.path.exists(cache_dir):
-        return 0
+    if not os.path.exists(cache_dir): return 0
     total = 0
     try:
         for root, _, files in os.walk(cache_dir):
             for f in files:
                 p = os.path.join(root, f)
-                if os.path.exists(p):
-                    total += os.path.getsize(p)
-    except:
-        pass
-    return round(total / (1024*1024), 2)
+                if os.path.exists(p): total += os.path.getsize(p)
+    except: pass
+    return round(total/(1024*1024), 2)
 
 def get_scripts():
     scripts = []
-    if not os.path.exists(SCRIPTS_DIR):
-        return scripts
-    with open(STATUS_FILE, 'r') as f:
-        status_data = json.load(f)
+    if not os.path.exists(SCRIPTS_DIR): return scripts
+    with open(STATUS_FILE, 'r') as f: status_data = json.load(f)
     for fn in sorted(os.listdir(SCRIPTS_DIR)):
         full_path = os.path.join(SCRIPTS_DIR, fn)
         if fn.endswith('.py') and os.path.isfile(full_path):
             st = os.stat(full_path)
-            s = status_data.get(fn, {'status': 'idle', 'pid': None})
+            s = status_data.get(fn, {'status':'idle', 'pid':None})
             scripts.append({
-                'name': fn,
-                'size': st.st_size,
+                'name': fn, 'size': st.st_size,
                 'mtime': datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
-                'status': s.get('status', 'idle'),
-                'pid': s.get('pid'),
+                'status': s.get('status','idle'), 'pid': s.get('pid'),
                 'remark': extract_beizhu(full_path) or ''
             })
     return scripts
@@ -109,23 +134,18 @@ def kill_process_on_port(port=5000):
             pids = subprocess.run(cmd, shell=True, capture_output=True, text=True).stdout.strip().split()
             if pids:
                 for pid in pids:
-                    try:
-                        os.kill(int(pid), signal.SIGKILL)
-                    except:
-                        pass
+                    try: os.kill(int(pid), signal.SIGKILL)
+                    except: pass
                 return True
-    except:
-        pass
+    except: pass
     return True
 
 def get_router_ip():
     try:
         ip = subprocess.run(["uci", "get", "network.lan.ipaddr"], capture_output=True, text=True, timeout=2).stdout.strip()
-        if ip and '/' in ip:
-            ip = ip.split('/')[0]
+        if ip and '/' in ip: ip = ip.split('/')[0]
         return ip or "192.168.1.1"
-    except:
-        return "192.168.1.1"
+    except: return "192.168.1.1"
 
 # ========== 静态文件路由 ==========
 @route('/static/<filename:path>')
@@ -158,78 +178,58 @@ def api_router_ip():
     return json.dumps({'ip': get_router_ip()})
 
 # ========== 检查脚本是否为弹窗脚本（扫描前10行） ==========
+# 同时支持读取 # html: 自定义文件名.html
 @route('/api/check_popup/<name>')
 def check_popup(name):
     if '/' in name or '\\' in name:
-        return json.dumps({'popup': None})
+        return json.dumps({'popup': None, 'html': None})
     path = os.path.join(SCRIPTS_DIR, name)
     if not os.path.exists(path):
         path = os.path.join(TOOLS_DIR, name)
         if not os.path.exists(path):
-            return json.dumps({'popup': None})
+            return json.dumps({'popup': None, 'html': None})
+    popup_id = None
+    html_file = None
     try:
         with open(path, 'r', encoding='utf-8') as f:
             for i, line in enumerate(f):
-                if i >= 10:
-                    break
-                if line.strip().startswith('# popup:'):
+                if i >= 10: break
+                line = line.strip()
+                if line.startswith('# popup:'):
                     popup_id = line.split(':', 1)[1].strip()
-                    return json.dumps({'popup': popup_id})
-    except:
-        pass
-    return json.dumps({'popup': None})
+                elif line.startswith('# html:'):
+                    html_file = line.split(':', 1)[1].strip()
+    except: pass
+    return json.dumps({'popup': popup_id, 'html': html_file})
 
 # ========== 获取动态按钮配置 ==========
 @route('/api/buttons')
 def api_buttons():
     buttons = {'script': [], 'router': []}
-    if not os.path.isdir(TOOLS_DIR):
-        return json.dumps(buttons)
-    
+    if not os.path.isdir(TOOLS_DIR): return json.dumps(buttons)
     for fn in sorted(os.listdir(TOOLS_DIR)):
-        if not fn.endswith('.py'):
-            continue
+        if not fn.endswith('.py'): continue
         fp = os.path.join(TOOLS_DIR, fn)
         try:
             with open(fp, 'r', encoding='utf-8') as f:
                 lines = [f.readline() for _ in range(15)]
-        except:
-            continue
-        
-        btn_title = None
-        group = 'script'
-        order = 99
-        action = None
-        btn_class = 'btn-default'
-        
+        except: continue
+        btn_title, group, order, action, btn_class = None, 'script', 99, None, 'btn-default'
         for line in lines:
             line = line.strip()
-            if line.startswith('# btn:'):
-                btn_title = line.split(':', 1)[1].strip()
-            elif line.startswith('# group:'):
-                group = line.split(':', 1)[1].strip()
+            if line.startswith('# btn:'): btn_title = line.split(':',1)[1].strip()
+            elif line.startswith('# group:'): group = line.split(':',1)[1].strip()
             elif line.startswith('# order:'):
-                try:
-                    order = int(line.split(':', 1)[1].strip())
-                except:
-                    pass
-            elif line.startswith('# action:'):
-                action = line.split(':', 1)[1].strip()
-            elif line.startswith('# btn-class:'):
-                btn_class = line.split(':', 1)[1].strip()
-        
+                try: order = int(line.split(':',1)[1].strip())
+                except: pass
+            elif line.startswith('# action:'): action = line.split(':',1)[1].strip()
+            elif line.startswith('# btn-class:'): btn_class = line.split(':',1)[1].strip()
         if btn_title and action:
             buttons.setdefault(group, []).append({
-                'title': btn_title,
-                'order': order,
-                'action': action,
-                'file': fn,
-                'btnClass': btn_class
+                'title': btn_title, 'order': order, 'action': action,
+                'file': fn, 'btnClass': btn_class
             })
-    
-    for group in buttons:
-        buttons[group].sort(key=lambda x: x['order'])
-    
+    for group in buttons: buttons[group].sort(key=lambda x: x['order'])
     response.content_type = 'application/json'
     return json.dumps(buttons)
 
@@ -239,31 +239,23 @@ def stop_script(name):
     try:
         script_path = os.path.join(TOOLS_DIR, 'stop_script.py')
         if not os.path.exists(script_path):
-            response.status = 500
-            return json.dumps({'error': 'stop_script.py 不存在'})
-        result = subprocess.run(
-            ['python3', script_path, '--name', name],
-            capture_output=True, text=True, timeout=30
-        )
+            response.status = 500; return json.dumps({'error':'stop_script.py 不存在'})
+        result = subprocess.run(['python3', script_path, '--name', name], capture_output=True, text=True, timeout=30)
         output = result.stdout + result.stderr
         response.content_type = 'application/json'
         return json.dumps({'message': output.strip() or '执行完成'})
     except Exception as e:
-        response.status = 500
-        return json.dumps({'error': str(e)})
+        response.status = 500; return json.dumps({'error': str(e)})
 
 # ========== 获取脚本内容（编辑用） ==========
 @route('/api/get/<name>')
 def get_script(name):
     if '/' in name or '\\' in name:
-        response.status = 400
-        return json.dumps({'error': '文件名不合法'})
+        response.status = 400; return json.dumps({'error':'文件名不合法'})
     path = os.path.join(SCRIPTS_DIR, name)
     if not os.path.exists(path):
-        response.status = 404
-        return json.dumps({'error': '脚本不存在'})
-    with open(path, 'r') as f:
-        content = f.read()
+        response.status = 404; return json.dumps({'error':'脚本不存在'})
+    with open(path, 'r') as f: content = f.read()
     response.content_type = 'application/json'
     return json.dumps({'name': name, 'content': content})
 
@@ -273,45 +265,34 @@ def run_tool():
     data = request.json
     script = data.get('script', '')
     args = data.get('args', [])
-    if not script:
-        response.status = 400
-        return json.dumps({'error': '未指定脚本'})
+    if not script: response.status = 400; return json.dumps({'error':'未指定脚本'})
     if not script.endswith('.py') or '/' in script:
-        response.status = 400
-        return json.dumps({'error': '不安全的脚本名'})
-
-    if script == 'kill_top_process.py':
-        if '--exclude' not in str(args):
-            args = ['--exclude', str(os.getpid())] + args
-
+        response.status = 400; return json.dumps({'error':'不安全的脚本名'})
+    if script == 'kill_top_process.py' and '--exclude' not in str(args):
+        args = ['--exclude', str(os.getpid())] + args
     script_path = os.path.join(TOOLS_DIR, script)
     if not os.path.exists(script_path):
-        response.status = 404
-        return json.dumps({'error': f'工具脚本 {script} 不存在'})
+        response.status = 404; return json.dumps({'error': f'工具脚本 {script} 不存在'})
     try:
         cmd = ['python3', script_path] + [str(a) for a in args]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         output = result.stdout + result.stderr
-        if not output.strip():
-            output = '✅ 执行完成（无输出）'
+        if not output.strip(): output = '✅ 执行完成（无输出）'
         response.content_type = 'application/json'
         return json.dumps({'output': output})
     except subprocess.TimeoutExpired:
-        response.status = 500
-        return json.dumps({'output': '⏱ 执行超时（300秒）'})
+        response.status = 500; return json.dumps({'output':'⏱ 执行超时（300秒）'})
     except Exception as e:
-        response.status = 500
-        return json.dumps({'output': f'❌ 执行失败: {e}'})
+        response.status = 500; return json.dumps({'output': f'❌ 执行失败: {e}'})
 
 @route('/api/restart_router', method='POST')
 def restart_router():
     try:
         subprocess.Popen(['reboot'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         response.content_type = 'application/json'
-        return json.dumps({'message': '✅ 路由器正在重启...'})
+        return json.dumps({'message':'✅ 路由器正在重启...'})
     except Exception as e:
-        response.status = 500
-        return json.dumps({'error': str(e)})
+        response.status = 500; return json.dumps({'error': str(e)})
 
 # ==================== HTML 模板 ====================
 HTML = r'''
@@ -450,6 +431,7 @@ select{appearance:auto;background:#fff}
 <script>
 var routerIP = '';
 var modalLoaded = false;
+var currentLoadedHtml = 'modal_content.html';   // 记录当前加载的弹窗文件
 
 function st(s){var map={idle:'待执行',running:'运行中',success:'成功',failed:'失败',timeout:'超时',error:'错误',stopped:'已停止'};return map[s]||s}
 function badge(s){return'<span class="badge '+s+'">'+st(s)+'</span>'}
@@ -517,11 +499,7 @@ function runScript(name) {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.popup) {
-                loadModal(data.popup);
-                var initFn = window['init_' + data.popup];
-                if (typeof initFn === 'function') {
-                    setTimeout(initFn, 200);
-                }
+                loadModal(data.popup, data.html);   // 传入 html 参数（如果脚本指定了 # html）
                 return;
             }
             doRunTool('run_script.py', ['--name', name], '▶ 运行 ' + name);
@@ -575,9 +553,17 @@ function doRunTool(script, args, label) {
     });
 }
 
-// ========== 通用弹窗加载器（使用 window 函数初始化） ==========
-function loadModal(name) {
+// ========== 通用弹窗加载器（支持自定义 HTML 文件） ==========
+function loadModal(name, htmlFile) {
     var container = document.getElementById('modalContainer');
+    var targetHtml = htmlFile || 'modal_content.html';   // 如果没有指定，默认加载主弹窗文件
+
+    // 如果请求的文件与当前已加载的不同，则强制重新加载
+    if (currentLoadedHtml !== targetHtml) {
+        modalLoaded = false;
+        container.innerHTML = '';
+    }
+
     if (modalLoaded) {
         document.querySelectorAll('#modalContainer .modal').forEach(function(el) {
             el.style.display = 'none';
@@ -585,66 +571,41 @@ function loadModal(name) {
         var target = document.getElementById(name);
         if (target) {
             target.style.display = 'flex';
-            // 使用 window 函数初始化
-            if (name === 'editModal' && typeof window.init_editModal === 'function') window.init_editModal();
-            if (name === 'delModal' && typeof window.init_delModal === 'function') window.init_delModal();
-            if (name === 'logModal' && typeof window.init_logModal === 'function') window.init_logModal();
-            if (name === 'cronModal') {
-                if (typeof window.init_cronModal === 'function') window.init_cronModal();
+            var initFn = window['init_' + name];
+            if (typeof initFn === 'function') {
+                setTimeout(initFn, 100);
             }
-            if (name === 'syncModal' && typeof window.init_syncModal === 'function') window.init_syncModal();
-            if (name === 'procModal' && typeof window.init_procModal === 'function') window.init_procModal();
         }
         return;
     }
-    fetch('/static/modal_content.html')
+
+    fetch('/static/' + targetHtml)
         .then(function(r) { return r.text(); })
         .then(function(html) {
-            var tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html;
-            var scripts = tempDiv.querySelectorAll('script');
-            var cleanHtml = html.replace(/<script>[\s\S]*?<\/script>/g, '');
-            
-            container.innerHTML = cleanHtml;
-            modalLoaded = true;
-            
-            scripts.forEach(function(scriptTag) {
-                var code = scriptTag.textContent || scriptTag.innerHTML;
-                try {
-                    eval(code);
-                } catch(e) {
-                    console.log('弹窗 JS 执行失败:', e);
-                }
+            var scriptCode = '';
+            html = html.replace(/<script>([\s\S]*?)<\/script>/g, function(match, code) {
+                scriptCode += code + '\n';
+                return '';
             });
-            
+            container.innerHTML = html;
+            modalLoaded = true;
+            currentLoadedHtml = targetHtml;   // 记录当前加载的文件名
+            if (scriptCode) {
+                try { eval(scriptCode); } catch(e) { console.log('弹窗 JS 执行失败:', e); }
+            }
             document.querySelectorAll('#modalContainer .modal').forEach(function(el) {
                 el.style.display = 'none';
             });
             var target = document.getElementById(name);
             if (target) {
                 target.style.display = 'flex';
-                // 使用 window 函数初始化
-                if (name === 'editModal' && typeof window.init_editModal === 'function') window.init_editModal();
-                if (name === 'delModal' && typeof window.init_delModal === 'function') window.init_delModal();
-                if (name === 'logModal' && typeof window.init_logModal === 'function') window.init_logModal();
-                if (name === 'cronModal') {
-                    if (typeof window.init_cronModal === 'function') window.init_cronModal();
+                var initFn = window['init_' + name];
+                if (typeof initFn === 'function') {
+                    setTimeout(initFn, 100);
                 }
-                if (name === 'syncModal' && typeof window.init_syncModal === 'function') window.init_syncModal();
-                if (name === 'procModal' && typeof window.init_procModal === 'function') window.init_procModal();
             }
         })
         .catch(function(e) { alert('加载模块失败: ' + e.message); });
-}
-
-function closeModalByName(name) {
-    var el = document.getElementById(name);
-    if (el) {
-        el.style.display = 'none';
-        var container = document.getElementById('modalContainer');
-        container.innerHTML = '';
-        modalLoaded = false;
-    }
 }
 
 // ========== 动态按钮生成 ==========
