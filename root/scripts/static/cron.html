@@ -12,6 +12,7 @@
             <option value="weekly">📅 每周</option>
             <option value="hourly">⏰ 每小时</option>
             <option value="minutes">⏱️ 每N分钟</option>
+            <option value="timerange">⏱ 时间段循环（几点~几点，每N分钟/每小时）</option>
         </select>
     </div>
     <!-- 每天 -->
@@ -112,6 +113,49 @@
             <option value="20">20</option><option value="30">30</option><option value="60">60</option>
         </select>分钟执行一次
     </div>
+    <!-- 时间段循环 新增模块 -->
+<div id="cronTimeRange" style="display:none;margin-bottom:12px;background:#f0f7ff;padding:12px;border-radius:6px;">
+    <div style="margin-bottom:10px;">
+        <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">起始小时</label>
+        <select id="rangeStartHour" style="width:70px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
+            <option value="0">00</option><option value="1">01</option><option value="2">02</option><option value="3">03</option>
+            <option value="4">04</option><option value="5">05</option><option value="6">06</option><option value="7">07</option>
+            <option value="8">08</option><option value="9">09</option><option value="10">10</option><option value="11">11</option>
+            <option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option>
+            <option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option>
+            <option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option>
+        </select>
+        <span style="margin:0 8px;">~</span>
+        <label style="font-weight:500;font-size:13px;color:#555;display:inline-block;margin-bottom:4px;">结束小时</label>
+        <select id="rangeEndHour" style="width:70px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
+            <option value="0">00</option><option value="1">01</option><option value="2">02</option><option value="3">03</option>
+            <option value="4">04</option><option value="5">05</option><option value="6">06</option><option value="7">07</option>
+            <option value="8">08</option><option value="9">09</option><option value="10">10</option><option value="11">11</option>
+            <option value="12" selected>12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option>
+            <option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option>
+            <option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option>
+        </select>
+    </div>
+    <div style="margin-bottom:8px;">
+        <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">循环间隔</label>
+        <select id="rangeIntervalType" onchange="window.updateCronSchedule()">
+            <option value="hour">每小时整点执行</option>
+            <option value="min">每N分钟执行</option>
+        </select>
+    </div>
+    <div id="rangeMinBox" style="display:none;margin-bottom:6px;">
+        <label>每</label>
+        <select id="rangeMinNum">
+            <option value="1">1</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="15" selected>15</option>
+            <option value="30">30</option>
+        </select>
+        <span>分钟</span>
+    </div>
+    <div style="font-size:12px;color:#888;margin-top:4px;">💡 示例：5~12点，每小时整点 → 0 5-12 * * *</div>
+</div>     
     <!-- 自定义 -->
     <div id="cronCustom" style="margin-bottom:12px;">
         <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">Cron 表达式</label>
@@ -239,6 +283,11 @@ window.cronModeChange = function() {
     document.getElementById('cronHourly').style.display = (mode === 'hourly') ? 'block' : 'none';
     document.getElementById('cronMinutes').style.display = (mode === 'minutes') ? 'block' : 'none';
     document.getElementById('cronCustom').style.display = (mode === 'custom') ? 'block' : 'none';
+    // 新增时间段面板控制
+    document.getElementById('cronTimeRange').style.display = (mode === 'timerange') ? 'block' : 'none';
+    // 间隔类型切换
+    var intervalType = document.getElementById('rangeIntervalType').value;
+    document.getElementById('rangeMinBox').style.display = (intervalType === 'min') ? 'block' : 'none';
     window.updateCronSchedule();
 };
 window.updateCronSchedule = function() {
@@ -264,12 +313,27 @@ window.updateCronSchedule = function() {
             var interval = document.getElementById('cronMinutesInterval').value;
             schedule = '*/' + interval + ' * * * *';
             break;
+        // 新增：时间段循环逻辑
+        case 'timerange':
+            var startH = document.getElementById('rangeStartHour').value;
+            var endH = document.getElementById('rangeEndHour').value;
+            var intType = document.getElementById('rangeIntervalType').value;
+            if(intType === 'hour'){
+                // 时间段内每小时整点执行：0 5-12 * * *
+                schedule = '0 ' + startH + '-' + endH + ' * * *';
+            }else{
+                // 时间段内每N分钟：*/10 5-12 * * *
+                var minNum = document.getElementById('rangeMinNum').value;
+                schedule = '*/' + minNum + ' ' + startH + '-' + endH + ' * * *';
+            }
+            break;
         case 'custom':
         default:
             return;
     }
     document.getElementById('cronSchedule').value = schedule;
 };
+
 window.cronRefreshList = function() {
     var container = document.getElementById('cronListContainer');
     if (!container) return;
