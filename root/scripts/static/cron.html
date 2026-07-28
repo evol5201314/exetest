@@ -12,7 +12,6 @@
             <option value="weekly">📅 每周</option>
             <option value="hourly">⏰ 每小时</option>
             <option value="minutes">⏱️ 每N分钟</option>
-            <!-- 修改：图标改为 🔄 -->
             <option value="timerange">🔄 时间段循环（几点~几点，每N分钟/每小时）</option>
         </select>
     </div>
@@ -146,46 +145,25 @@
         </select>
         <span>分钟</span>
     </div>
-    <!-- ===== 新增：日、月、周 条件 ===== -->
+    <!-- ===== 修改：日、月、周 改为文本输入框，支持范围/列表 ===== -->
     <div style="margin-top:10px;border-top:1px dashed #ccc;padding-top:10px;">
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
             <div>
                 <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">日 (每月第几天)</label>
-                <select id="rangeDay" onchange="window.updateCronSchedule()" style="width:70px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
-                    <option value="*">* (每天)</option>
-                    <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-                    <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
-                    <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
-                    <option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option>
-                    <option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option>
-                    <option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option>
-                    <option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option>
-                    <option value="29">29</option><option value="30">30</option><option value="31">31</option>
-                </select>
+                <input type="text" id="rangeDay" value="*" onchange="window.updateCronSchedule()" style="width:70px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;font-family:monospace;" placeholder="* 或 1-31">
             </div>
             <div>
                 <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">月</label>
-                <select id="rangeMonth" onchange="window.updateCronSchedule()" style="width:70px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
-                    <option value="*">* (每月)</option>
-                    <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
-                    <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
-                    <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
-                    <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
-                </select>
+                <input type="text" id="rangeMonth" value="*" onchange="window.updateCronSchedule()" style="width:70px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;font-family:monospace;" placeholder="* 或 1-12">
             </div>
             <div>
                 <label style="font-weight:500;font-size:13px;color:#555;display:block;margin-bottom:4px;">星期几</label>
-                <select id="rangeWeekday" onchange="window.updateCronSchedule()" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;">
-                    <option value="*">* (每天)</option>
-                    <option value="0">周日</option><option value="1">周一</option><option value="2">周二</option>
-                    <option value="3">周三</option><option value="4">周四</option><option value="5">周五</option>
-                    <option value="6">周六</option>
-                </select>
+                <input type="text" id="rangeWeekday" value="*" onchange="window.updateCronSchedule()" style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:14px;font-family:monospace;" placeholder="* 或 0-6">
             </div>
         </div>
-        <div style="font-size:12px;color:#888;margin-top:4px;">💡 以上三项默认 <code>*</code>，表示不限。可组合使用，例如：日=1，月=1，周=* → 每月1号执行。</div>
+        <div style="font-size:12px;color:#888;margin-top:4px;">💡 支持 <code>*</code>（不限）、范围如 <code>5-12</code>、列表如 <code>1,3,5</code>、步长如 <code>*/2</code> 等标准 cron 语法。</div>
     </div>
-    <!-- ===== 新增结束 ===== -->
+    <!-- ===== 修改结束 ===== -->
     <div style="font-size:12px;color:#888;margin-top:4px;">💡 示例：5~12点，每小时整点，每天 → 0 5-12 * * *</div>
 </div>     
     <!-- 自定义 -->
@@ -347,7 +325,7 @@ window.updateCronSchedule = function() {
             var interval = document.getElementById('cronMinutesInterval').value;
             schedule = '*/' + interval + ' * * * *';
             break;
-        // 新增：时间段循环逻辑（包含日、月、周）
+        // 新增：时间段循环逻辑（日、月、周从文本输入框读取）
         case 'timerange':
             // 兜底二次刷新分钟框显示，防止切换异常
             var intervalType = document.getElementById('rangeIntervalType').value;
@@ -356,10 +334,10 @@ window.updateCronSchedule = function() {
             var startH = document.getElementById('rangeStartHour').value;
             var endH = document.getElementById('rangeEndHour').value;
             var intType = document.getElementById('rangeIntervalType').value;
-            // 获取新增的三个条件
-            var day = document.getElementById('rangeDay').value;
-            var month = document.getElementById('rangeMonth').value;
-            var weekday = document.getElementById('rangeWeekday').value;
+            // 从输入框读取日、月、周
+            var day = document.getElementById('rangeDay').value.trim() || '*';
+            var month = document.getElementById('rangeMonth').value.trim() || '*';
+            var weekday = document.getElementById('rangeWeekday').value.trim() || '*';
 
             var minutePart = '';
             if(intType === 'hour'){
