@@ -5,7 +5,7 @@ import sys
 # 加载pyserial库目录
 sys.path.append("/root/scripts")
 import serial
-
+beizhu = "📈 监控温度开启风扇"
 # ==========可自行修改配置参数==========
 SER_DEV = "/dev/ttyUSB0"  # 继电器USB串口设备名
 BAUD = 9600                 # 串口波特率，和继电器匹配
