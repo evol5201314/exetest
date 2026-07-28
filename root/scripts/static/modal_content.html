@@ -313,32 +313,8 @@ window.doUpload = function() {
     reader.readAsDataURL(file);
 };
 
-// ========== 查看日志 ==========
-window.init_logModal = function() { window.populateLogSelect(); };
-window.populateLogSelect = function() {
-    fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'view_log.py', args: ['--list'] }) })
-        .then(r => r.json()).then(d => {
-            try {
-                var list = JSON.parse(d.output);
-                var sel = document.getElementById('logSelect');
-                if (!sel) return;
-                sel.innerHTML = '<option value="">📌 最新日志</option>';
-                if (list && list.length) list.forEach(function(name) { var opt = document.createElement('option'); opt.value = name; opt.textContent = name; sel.appendChild(opt); });
-                window.loadLog();
-            } catch (e) {}
-        }).catch(function() {});
-};
-window.loadLog = function() {
-    var name = document.getElementById('logSelect').value;
-    document.getElementById('logContent').textContent = '⏳ 加载中...';
-    var args = name ? ['--name', name] : ['--latest'];
-    fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'view_log.py', args: args }) })
-        .then(r => r.json()).then(d => { document.getElementById('logContent').textContent = d.output || '暂无输出'; })
-        .catch(e => { document.getElementById('logContent').textContent = '❌ 加载失败: ' + e.message; });
-};
-// 修复：清空当前脚本日志
 window.clearCurrentLog = function() {
-    let name = document.getElementById('logSelect').value;
+    var name = document.getElementById('logSelect').value;
     if (!name) return alert("请先选择对应脚本");
     fetch('/api/run_tool', {
         method: 'POST',
@@ -347,12 +323,13 @@ window.clearCurrentLog = function() {
             script: 'view_log.py',
             args: ['--clear', '--name', name]
         })
-    }).then(r => r.json()).then(() => {
+    }).then(function(r) {
+        return r.json();
+    }).then(function() {
         alert("当前脚本日志已清空");
         window.loadLog();
     })
 };
-// 修复：清空全部日志
 window.clearAllLogs = function() {
     if (!confirm("确定清空所有脚本日志？操作不可恢复！")) return;
     fetch('/api/run_tool', {
@@ -362,12 +339,13 @@ window.clearAllLogs = function() {
             script: 'view_log.py',
             args: ['--clear-all']
         })
-    }).then(r => r.json()).then(() => {
+    }).then(function(r) {
+        return r.json();
+    }).then(function() {
         alert("全部日志清理完成");
         window.loadLog();
     })
 };
-
 // ========== 同步 GitHub ==========
 window.init_syncModal = function() {
     window.loadSyncConfig();
@@ -381,18 +359,20 @@ window.loadSyncConfig = function() {
             args: ['--get-config']
         })
     })
-    .then(res => res.json())
-    .then(data => {
+    .then(function(res) {
+        return res.json();
+    })
+    .then(function(data) {
         document.getElementById('syncRepoInput').value = data.output.trim();
     })
-    .catch(() => {});
+    .catch(function() {});
 };
 window.doSync = function() {
-    let repo = document.getElementById('syncRepoInput').value.trim()
-    if(!repo) return alert("请填写GitHub仓库地址")
-    let outputDom = document.getElementById('syncOutput')
-    outputDom.style.display = 'block'
-    outputDom.textContent = "⏳ 正在同步仓库脚本..."
+    var repo = document.getElementById('syncRepoInput').value.trim();
+    if(!repo) return alert("请填写GitHub仓库地址");
+    var outputDom = document.getElementById('syncOutput');
+    outputDom.style.display = 'block';
+    outputDom.textContent = "⏳ 正在同步仓库脚本...";
     fetch('/api/run_tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -401,12 +381,16 @@ window.doSync = function() {
             args: ['--repo', repo]
         })
     })
-    .then(res => res.json())
-    .then(data => {
-        outputDom.textContent = data.output
-        if(data.output.includes("下载")) loadAll()
+    .then(function(res) {
+        return res.json();
     })
-    .catch(err => {
-        outputDom.textContent = "❌ 同步失败："+err.message
+    .then(function(data) {
+        outputDom.textContent = data.output;
+        if(data.output.indexOf("下载") > -1) {
+            loadAll()
+        }
     })
-}
+    .catch(function(err) {
+        outputDom.textContent = "❌ 同步失败："+err.message;
+    });
+};    
