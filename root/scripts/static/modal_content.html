@@ -336,8 +336,41 @@ window.loadLog = function() {
         .then(r => r.json()).then(d => { document.getElementById('logContent').textContent = d.output || '暂无输出'; })
         .catch(e => { document.getElementById('logContent').textContent = '❌ 加载失败: ' + e.message; });
 };
-window.clearCurrentLog = function() { /* ... 保持不变 ... */ };
-window.clearAllLogs = function() { /* ... 保持不变 ... */ };
+window.clearCurrentLog = function() {
+    var name = document.getElementById('logSelect').value;
+    if (!name) return alert("请先选择对应脚本");
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            script: 'view_log.py',
+            args: ['--clear', '--name', name]
+        })
+    }).then(function(r) {
+        return r.json();
+    }).then(function(res) {
+        alert(res.output);
+        window.populateLogSelect();
+        window.loadLog();
+    })
+};
+window.clearAllLogs = function() {
+    if (!confirm("确定清空所有脚本日志？操作不可恢复！")) return;
+    fetch('/api/run_tool', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            script: 'view_log.py',
+            args: ['--clear-all']
+        })
+    }).then(function(r) {
+        return r.json();
+    }).then(function(res) {
+        alert(res.output);
+        window.populateLogSelect();
+        window.loadLog();
+    })
+};
 
 // ========== 同步 GitHub ==========
 window.init_syncModal = function() {
