@@ -2,7 +2,7 @@ import sys
 sys.path.append("/root/scripts")
 import serial
 import time
-
+beizhu = "📈 监控温度开启风扇"
 # 串口配置和你测试脚本完全一致
 SER_DEV = "/dev/ttyUSB0"
 BAUD_RATE = 9600
