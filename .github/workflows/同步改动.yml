@@ -1,0 +1,53 @@
+name: 同步改动
+
+on:
+  workflow_dispatch
+
+permissions:
+  contents: write
+
+env:
+  # =========================================================================
+  # 从 exetest (源) 同步到 openwrt-nikki-rax3000m (目标)
+  # =========================================================================
+  SOURCE_REPO: "evol5201314/exetest"              # 源仓库
+  SOURCE_REF: "main"                              # 源分支（exetest 的主分支）
+  SOURCE_PATH: "files/etc"                        # 源目录
+
+  TARGET_REPO: "evol5201314/openwrt-nikki-rax3000m"  # 目标仓库
+  TARGET_REF: "25.12.1"                           # 目标分支（注意：需要已存在）
+  TARGET_PATH: "files/etc"                        # 目标目录
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出目标仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          ref: ${{ env.TARGET_REF }}
+          path: target
+          # 如果遇到权限问题，取消下面注释并配置 PAT_TOKEN
+          # token: ${{ secrets.PAT_TOKEN }}
+
+      - name: 检出源仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ env.SOURCE_REF }}
+          path: source
+
+      - name: 复制文件（强制覆盖，包含文件夹）
+        run: |
+          mkdir -p target/${{ env.TARGET_PATH }}
+          cp -rf source/${{ env.SOURCE_PATH }}/* target/${{ env.TARGET_PATH }}/
+
+      - name: 提交并推送
+        run: |
+          cd target
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --staged --quiet || git commit -m "同步来自 ${{ env.SOURCE_REPO }}:${{ env.SOURCE_PATH }}"
+          git push
