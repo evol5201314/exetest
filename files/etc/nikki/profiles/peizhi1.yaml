@@ -84,7 +84,7 @@ proxy-providers:
     type: http
     url: "https://a.bbydy.org/api/bby/client/subscribe?token=11937c3ea30b86b8f0a904c9ebff5fbbd8"
     timeout: 10000     # 单次10秒超时，到点直接放弃，不拖
-    interval: 7200          # 2小时自动更新订阅
+    interval: 72000          # 2小时自动更新订阅
     user-agent: "Clash/1.18.0"
     retries: 1          # 最多重试 1 次
     retry-delay: 60000  # 重试等待 60 秒，不疯狂刷屏
@@ -94,9 +94,9 @@ proxy-providers:
   # 主力高速节点组1
   不限量机场:
     type: http
-    url: "https://8.217.98.112:1000/config?token=30f9f938c55cd934cb34c124bad0ff0f85"
+    url: "https://url.409648.xyz/data/payload/getlink?token=30MTM0OTQ6ODk2NTFjODUxNmFjMzQ5ODhlMTUzOGUwN2ExMGJhN2QyOGExNzY1Mw"
     timeout: 10000     # 单次10秒超时，到点直接放弃，不拖
-    interval: 7200
+    interval: 72000
     user-agent: "Clash/1.18.0"
     retries: 1          # 最多重试 1 次
     retry-delay: 60000  # 重试等待 60 秒，不疯狂刷屏
@@ -105,9 +105,9 @@ proxy-providers:
   # 主力高速节点组2
   不限量机场2:
     type: http
-    url: "https://nodesfree.github.io/clashnode/clash.yaml"
+    url: "https://212.47.238.39/api/v1/client/subscribe?token=30e5d602d8ec5ea3b99fbb685942cad8b7"
     timeout: 10000     # 单次10秒超时，到点直接放弃，不拖
-    interval: 7200
+    interval: 72000
     user-agent: "Clash/1.18.0"
     retries: 1          # 最多重试 1 次
     retry-delay: 60000  # 重试等待 60 秒，不疯狂刷屏
@@ -118,7 +118,7 @@ proxy-providers:
     type: http
     url: "https://IwhkWO.mcsslk.xyz/162def6d0f4d8bab04ccc61560092683"
     timeout: 10000     # 单次10秒超时，到点直接放弃，不拖
-    interval: 7200
+    interval: 72000
     user-agent: "Clash/1.18.0"
     retries: 1          # 最多重试 1 次
     retry-delay: 60000  # 重试等待 60 秒，不疯狂刷屏
