@@ -3,19 +3,25 @@ name: 一键同步
 on:
   workflow_dispatch
 
-env:
-  # ============================================================
-  # 👇 所有配置都在这里，修改这5个变量即可
-  # ============================================================
-  # 源仓库（项目 A）完整URL: https://github.com/evol5201314/openwrt-nikki-rax3000m/tree/25.12.15/files/etc
-  SOURCE_REPO: "evol5201314/openwrt-nikki-rax3000m"   # 从URL中提取 owner/repo
-  SOURCE_REF: "25.12.15"                              # 分支或标签
-  SOURCE_PATH: "files/etc"                            # 要同步的源目录
+permissions:
+  contents: write
 
-  # 目标仓库（项目 B）完整URL: https://github.com/evol5201314/exetest (不需要分支和路径，因为就是当前仓库)
-  TARGET_REPO: "evol5201314/exetest"                  # 目标仓库 owner/repo
-  TARGET_PATH: "files/etc"                            # 目标存放目录（通常与源相同）
-  # ============================================================
+env:
+  # =========================================================================
+  # 所有配置集中在这里，修改这 5 个变量即可（其他不用动）
+  # =========================================================================
+  #
+  # 【项目 A - 源仓库】
+  # 完整 URL: https://github.com/evol5201314/openwrt-nikki-rax3000m/tree/25.12.15/files/etc
+  SOURCE_REPO: "evol5201314/openwrt-nikki-rax3000m"
+  SOURCE_REF: "25.12.15"
+  SOURCE_PATH: "files/etc"
+
+  # 【项目 B - 目标仓库】
+  # 完整 URL: https://github.com/evol5201314/exetest
+  TARGET_REPO: "evol5201314/exetest"
+  TARGET_PATH: "files/etc"
+  # =========================================================================
 
 jobs:
   sync:
@@ -34,7 +40,7 @@ jobs:
           ref: ${{ env.SOURCE_REF }}
           path: source
 
-      - name: 复制文件（默认覆盖，如需跳过已有文件，将 cp -rf 改为 cp -rn）
+      - name: 复制文件（默认强制覆盖）
         run: |
           mkdir -p target/${{ env.TARGET_PATH }}
           cp -rf source/${{ env.SOURCE_PATH }}/* target/${{ env.TARGET_PATH }}/
