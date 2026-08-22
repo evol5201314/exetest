@@ -1,0 +1,56 @@
+name: 拉取脚本到编译固件
+
+on:
+  workflow_dispatch
+
+permissions:
+  contents: write
+
+env:
+  # 拉取脚本文件到编译固件
+  # =========================================================================
+  # 所有配置集中在这里，修改这 5 个变量即可（其他不用动）
+  # =========================================================================
+  #
+  # 【项目 A - 源仓库】
+  # 完整 URL: https://github.com/evol5201314/openwrt-nikki-rax3000m/tree/25.12.15/files/etc
+  SOURCE_REPO: "evol5201314/exetest"    
+  SOURCE_REF: "main"                          # 源分支（默认 main）
+  SOURCE_PATH: "root/scripts"                 # 源目录
+
+  # 【项目 B - 目标仓库】
+  # 完整 URL: https://github.com/evol5201314/exetest
+  TARGET_REPO: "evol5201314/exetest"          # 目标仓库（和源是同一个）
+  TARGET_PATH: "files/etc/root/scripts"       # 目标目录
+  # =========================================================================
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出目标仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          path: target
+
+      - name: 检出源仓库
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ env.SOURCE_REF }}
+          path: source
+
+      - name: 复制文件（默认强制覆盖）
+        run: |
+          mkdir -p target/${{ env.TARGET_PATH }}
+          cp -rf source/${{ env.SOURCE_PATH }}/* target/${{ env.TARGET_PATH }}/
+
+      - name: 提交并推送
+        run: |
+          cd target
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --staged --quiet || git commit -m "同步上游 ${{ env.SOURCE_PATH }}"
+          git push
