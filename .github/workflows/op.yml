@@ -164,8 +164,8 @@ jobs:
         CONFIG_PACKAGE_kmod-usb-serial=y
         CONFIG_PACKAGE_kmod-usb-serial-ch341=y
         EOF
-         # 清除.config所有行开头空格，避免missing separator报错
-        sed -i 's/^ *//' $SOURCE_NAME/.config
+         # 清除.config所有行开头空格，避免missing separator报错 
+        sed -i 's/^ *//' $SOURCE_NAME/.config     新增行9 配合上面341驱动使用的代码   用户改动
         
         [ -e config ] && cat config/config-common >> $SOURCE_NAME/.config
         
@@ -228,7 +228,7 @@ jobs:
     - name: 清理Releases
       uses: gzk47/delete-older-releases@v0.3.5
       with:
-        keep_latest: 2           # 改动行5  用户改动
+        keep_latest: 2           # 改动行8  用户改动
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
