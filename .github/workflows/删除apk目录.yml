@@ -1,0 +1,40 @@
+name: 删除 apk 目录（含目录本身）
+
+on:
+  workflow_dispatch
+
+permissions:
+  contents: write
+
+env:
+  # =========================================================================
+  # 要删除的目录（相对于仓库根目录）
+  # 当前设置为: files/etc/apk
+  # 修改此变量即可切换其他目录
+  # =========================================================================
+  TARGET_PATH: "files/etc/apk"
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 删除整个目标目录
+        run: |
+          if [ -d "${{ env.TARGET_PATH }}" ]; then
+            echo "🗑️ 正在删除目录: ${{ env.TARGET_PATH }}"
+            rm -rf ${{ env.TARGET_PATH }}
+            echo "✅ 目录已删除"
+          else
+            echo "⚠️ 目录 ${{ env.TARGET_PATH }} 不存在，跳过操作"
+          fi
+
+      - name: 提交并推送更改
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --staged --quiet || git commit -m "删除 ${{ env.TARGET_PATH }} 目录"
+          git push
