@@ -1,0 +1,3 @@
+5 5 * * * python3 /root/scripts/app.py
+5 0 * * * python3 /root/scripts/wendu_off.py
+*/5 19-23 * 5-10 * python3 /root/scripts/wendu.py

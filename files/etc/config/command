@@ -1,0 +1,36 @@
+config command
+	option name '恢复command数据'
+	option command 'python3 /root/scripts/restore_command.py'
+
+config command
+	option name '备份command数据'
+	option command 'python3 /root/scripts/extract_command.py'
+
+config command
+	option name '清理路由器内存'
+	option command 'sh -c "sync; echo 3 > /proc/sys/vm/drop_caches"'
+
+config command
+	option name '清理插件下载包'
+	option command 'sh -c "apk cache purge 2>/dev/null"'
+
+config command
+	option name '启动python面板/访问192.168.1.2:5000'
+	option command 'python3 /root/scripts/app.py > /dev/null 2>&1 &'
+
+config command
+	option name '关闭python'
+	option command 'killall -9 python3'
+
+config command
+	option name '更新脚本清单'
+	option command 'python3 /root/scripts/sync1_github.py'
+
+config command
+	option name '查看脚本清单'
+	option command 'find /root/scripts -maxdepth 1 -type f -iname "*.py"'
+
+config command
+	option name '推送消息'
+	option command 'python3 /root/scripts/main.py'
+

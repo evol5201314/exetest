@@ -1,0 +1,414 @@
+# ==============================
+#  Nikki 远程订阅教程   效果：软件会直接从 GitHub 下载你这份完整配置，自动替换本地配置，以后更新配置一键拉取最新版！
+#  打开你的 Nikki / Mihomo / 面板找到 配置文件 → 远程订阅 / 下载配置把你复制的 GitHub Raw 链接 粘贴进去。
+#  选择配置文件 切换至编辑界面 选择配置文件 编辑 将60行机场地址更改为你的机场订阅地址  保存后 勾选配置 启用插件 即可
+#  自定义修改配置文件后 请全选粘贴至其他名称配置文件名 防止远程订阅覆盖，举例 创建peizhi2文件 将peizhi1文件全选粘贴进去 使用peizhi2文件开启插件
+#  已连通外网使用代理地址  未连通外网使用直连地址 直连地址可能因为dns污染无法下载 可尝试手机下载然后上传
+#  代理地址https://raw.githubusercontent.com/evol5201314/openwrt-nikki-rax3000m/master/files/etc/nikki/profiles/peizhi2.yaml
+#  直连地址https://cdn.jsdelivr.net/gh/evol5201314/openwrt-nikki-rax3000m@master/files/etc/nikki/profiles/peizhi2.yaml
+#  直连地址https://ghproxy.net/https://raw.githubusercontent.com/evol5201314/openwrt-nikki-rax3000m/master/files/etc/nikki/profiles/peizhi2.yaml
+#  最新更新时间2026/05/18-1
+# ==============================
+# 游戏模式 
+# ==============================
+#  Nikki 完整配置 开启ipv6+广告过滤+故障转移+多机场+tun nat优化联机游戏体验
+# 出现网站不能访问未被代理请在360行rules加上该网址
+# 出现网站跳转反诈宣传禁止访问/dns污染请在180行设置
+# 当前fakeip已关闭 启用mixed模式 如需开启 190行开启即可 mixed优点 解析速度更快
+# 规则外流量全部直连，游戏/本地软件不受影响
+# tun游戏模式减少460 丢包 游戏里瞬移、技能放不出来、卡顿判定 在50行开启
+# ==============================
+
+# 混合代理端口 HTTP/SOCKS5 共用端口
+mixed-port: 7890
+# 允许局域网其他设备使用代理
+allow-lan: true
+# 监听本机所有网卡IP
+bind-address: 0.0.0.0
+# 运行模式：按规则分流
+mode: rule
+# 启用geoip/geosite数据库模式 false为使用新版meatb数据库
+geodata-mode: true
+geo-auto-update: true       # 开启地理库自动更新
+geo-update-interval: 23    # 更新周期，单位小时，23小时轮询一次
+# 日志级别 error只输出错误，干净不刷屏
+log-level: error
+# 开启IPv6支持
+ipv6: true
+# 开启UDP转发(游戏/语音/流媒体必备)
+udp: true
+# 域名匹配严格模式
+find-process-mode: off
+# TCP长连接保活间隔
+keep-alive: true
+keep-alive-interval: 30
+
+# 开启规则内存缓存，加快分流速度，减少重复联网
+rule-cache: true
+
+# 规则订阅走代理拉取，不直连，确保规则正常更新
+profile:
+  rule-providers-direct: false        # 保留，兼容OpenClash
+
+
+# 开启TUN模式(不用全局劫持，避免游戏乱跑代理)  关闭游戏模式时到180行关闭fakeip 开启redir 模式
+tun:
+  enable: true                       # 必须开启：用于识别进程名
+# stack: system                      # 使用系统网络栈：最轻量、0额外延迟
+  stack: gvisor                      # 核心：用户态独立栈，抗丢包强 游戏460切换这个模式 缺点增加延迟3-5ms
+  auto-route: true                   # 最核心：false不修改系统路由 → 不走TUN的流量完全裸连，0延迟 /全局流量过虚拟网卡 游戏抗丢包必须true 日常不玩游戏可以false
+# 只玩国内游戏 可设置flase 搭配syestem栈 国内游戏原生延迟  tun功能相当于无效 玩国外游戏 必须设置flase 且fakeip白名单 把游戏放进虚拟ip 改为黑名单模式 
+  auto-detect-interface: false       # false关闭自动网卡扫描：省掉0.1ms后台CPU开销，极致稳定  /自动识别多网卡
+  dns-hijack: [any:53, tcp://any:53] # 关闭DNS劫持：留空彻底去掉1~3ms解析延迟，回归原生DNS  /强制劫持所有DNS请求（防泄漏）
+# dns-hijack: []                     # 开全局监听 route  接口需设置53any53  不开route的话 留空 二选一注释 route跟hijack一般搭配使用 开全局写接口 不开全局不写接口
+  route-exclude-address:
+    - 192.168.1.213/32               # 排除米家设备进tun
+# 排除底层/内网IPv6，解决TUN路由冲突、防止公网v6断流/切v4
+  inet6-route-exclude-address:
+    - fe80::/10   # 网卡链路本地地址，保障底层通信
+    - ::1/128     # 本机IPv6回环地址
+    - fc00::/7    # 内网ULA，留=内网快；删=内网走TUN变慢 公网根本没有 fc00::/7 的网站，全世界公网路由都不播这段，ISP 也会过滤
+  
+# 网页控制后台地址+密码
+# 192.168.1.2:9090
+external-controller: 0.0.0.0:9090
+secret: "998613"
+redir-port: 7891
+unified-delay: true
+# ==============================
+# 节点订阅组
+# ==============================
+proxy-providers:
+  # 低速备用节点组
+  限量机场:
+    type: http
+    url: "https://a.bbydy.org/api/bby/client/subscribe?token=11937c3ea30b86b8f0a904c9ebff5fbbd8"
+    timeout: 10000     # 单次10秒超时，到点直接放弃，不拖
+    interval: 7200          # 2小时自动更新订阅
+    user-agent: "Clash/1.18.0"
+    retries: 1          # 最多重试 1 次
+    retry-delay: 60000  # 重试等待 60 秒，不疯狂刷屏
+    async: false        # 关闭异步并行加载 → 改成串行逐个加载
+
+
+  # 主力高速节点组1
+  不限量机场:
+    type: http
+    url: "https://8.217.98.112:1000/config?token=30f9f938c55cd934cb34c124bad0ff0f85"
+    timeout: 10000     # 单次10秒超时，到点直接放弃，不拖
+    interval: 7200
+    user-agent: "Clash/1.18.0"
+    retries: 1          # 最多重试 1 次
+    retry-delay: 60000  # 重试等待 60 秒，不疯狂刷屏
+    async: false        # 关闭异步并行加载 → 改成串行逐个加载
+
+  # 主力高速节点组2
+  不限量机场2:
+    type: http
+    url: "https://nodesfree.github.io/clashnode/clash.yaml"
+    timeout: 10000     # 单次10秒超时，到点直接放弃，不拖
+    interval: 7200
+    user-agent: "Clash/1.18.0"
+    retries: 1          # 最多重试 1 次
+    retry-delay: 60000  # 重试等待 60 秒，不疯狂刷屏
+    async: false        # 关闭异步并行加载 → 改成串行逐个加载
+
+  # 主力高速节点组3
+  不限量机场3:
+    type: http
+    url: "https://IwhkWO.mcsslk.xyz/162def6d0f4d8bab04ccc61560092683"
+    timeout: 10000     # 单次10秒超时，到点直接放弃，不拖
+    interval: 7200
+    user-agent: "Clash/1.18.0"
+    retries: 1          # 最多重试 1 次
+    retry-delay: 60000  # 重试等待 60 秒，不疯狂刷屏
+    async: false        # 关闭异步并行加载 → 改成串行逐个加载
+
+# ==============================
+# 分流策略组
+# ==============================
+proxy-groups:
+  # 自动选延迟最低节点
+  - name: 不限量合集
+    type: url-test                                                  # 测速
+    url: http://www.gstatic.com/generate_204     # 测速目标地址
+    interval: 300                                                  # 测速间隔秒
+    timeout: 5000                                               # 单次测速超时5秒（和max-delay配合）
+    max-delay: 3000                                          # 超过3秒直接淘汰，快节点优先、慢节点不堆
+    tolerance: 200                                             # 优选节点不切换最低延迟
+    lazy: true                                                    # 无流量时不测速
+    exclude-filter: "(到期|过期|试用|测试|体验|剩余|邀请|http|客户端|导航|中国)"                     # 不使用节点词汇    
+    use:
+      - 不限量机场
+      - 不限量机场2
+      - 不限量机场3
+
+
+  # 故障备用节点
+  - name: 限量兜底
+    type: url-test                                                    # 测速
+    url: http://www.gstatic.com/generate_204       # 测速目标地址
+    interval: 300                                                    # 测速间隔秒
+    timeout: 5000                                                 # 单次测速超时5秒（和max-delay配合）
+    max-delay: 3000                                            # 超过3秒直接淘汰，快节点优先、慢节点不堆
+    tolerance: 200                                               # 优选节点不切换最低延迟
+    lazy: true                                                      # 无流量时不测速
+    exclude-filter: "(到期|过期|试用|测试|体验|剩余|邀请|http|客户端|导航|中国)"                     # 不使用节点词汇    
+    use:
+      - 限量机场
+
+  # 代理组：故障自动切换备用
+  - name: ProxyGroup
+    type: fallback
+    proxies:
+      - 不限量合集
+      - 限量兜底
+    interval: 180                                     # 检测连通间隔秒
+    idle-timeout: 20                                  # 超时条件秒
+    client-fingerprint: chrome                        # 模拟浏览器请求指纹，降低风控
+
+
+  # 外网专用分组：手动选择代理/直连
+  - name: PROXY
+    type: select
+    proxies:
+      - ProxyGroup  # 默认走代理组   
+      - DIRECT      # 需要时手动切直连
+      - REJECT      # 需要时手动切禁止
+
+  # 国内站点分组：手动选择直连/代理
+  - name: DOMESTIC
+    type: select
+    proxies:
+      - DIRECT      # 需要时手动切直连
+      - PROXY       # 需要时手动切代理
+      - REJECT      # 需要时手动切禁止
+   
+# ==============================
+# DNS 域名解析配置 【核心】
+# ==============================
+dns:
+  enable: true
+  ipv6: true
+  prefer-ipv6: true   #优先解析ipv6  
+# ==============================
+# dns防污染模式模式
+# 用处：解决dns污染 解决访问国内网站出现跳转江苏反诈平台 出现多人举报禁止访问页面
+# 缺点：全局dns监听会导致游戏延迟增加2ms左右 注重游戏关闭 注重网页开启
+# 此处为解决多网站在此处设置 一劳永逸 只想解决单网站建议在370行nameserver-policy中单独加域名+解析ip解决
+# listen: 127.0.0.1:53行取消注释开启dns防污染  注释掉关闭dns防污染
+# 注意删除注释后listen 的首字母l需要跟下面ipv6的i在同一列 不能往前往后移动位置
+# ==============================
+#  listen: 127.0.0.1:53       #注释掉为关闭 53监听 
+  listen: '[::]:1053'         #混入设置代理设置ipv4 ipv6监听禁止取消勾选 将53端口转发至1053端口 
+  prefer-h3: true             # DoH 优先 HTTP/3
+# ==============================
+# 网站解析方法 
+# 开启fakeip模式取消注释即可          慢但准确
+# 开启Mixed模式启用注释即可           两者兼顾 
+# 开启redir-host DNS模式 全部注释   快但可能漏 
+# 当前为fakeip DNS模式
+# ==============================
+  enhanced-mode: fake-ip       # 开启Fake-IP 防DNS劫持+拦截广告
+  fake-ip-range: 198.18.0.1/16 # 虚拟IP网段，固定不用改
+  fake-ip-range6: fdfe:dcba:9876::1/64  # 虚拟IP网段，固定不用改  
+# ==============================
+# enhanced-mode: mixed          # 开启mixed模式 防DNS劫持+拦截广告
+# fake-ip-range: 198.18.0.0/16  # 虚拟IP网段，固定不用改
+# ==============================
+#  enhanced-mode: redir-host     # 开启redir模式 dns最低防护延迟最低
+# ==============================  
+# dns缓存 
+  cache-size: 2000        # 最多存2000条域名解析记录
+  cache-expire: 1800       # 缓存有效期 30分钟（单位：秒）
+  cache-algorithm: arc     # 最优缓存淘汰算法（自动清老记录，推荐）
+  dns-preload: true         # 域名预解析缓存
+# ==============================
+  # 切换为白名单模式/黑名单 白名单为写了的走虚拟ip  黑名单为不写的走虚拟ip  走虚拟ip才拿实现精准不漏的分流 
+  fake-ip-filter-mode: whitelist          # 切换为虚拟ip白名单   列表内的走虚拟ip 
+  #  fake-ip-filter-mode: blacklist       # 切换为虚拟ip黑名单   列表内的不走虚拟ip
+  # 虚拟ip白/黑名单 黑名单为不写的走虚拟ip  走虚拟ip才拿实现精准不漏的分流 
+  fake-ip-filter:
+    - "geosite:gfw"                           # 国外网络走虚拟ip
+    - "geosite:category-entertainment-cn"     # 国内娱乐
+    - "geosite:category-wiki-cn"              # 国内百科
+    - "geosite:category-speedtest"            # 测速网站
+    - "geosite:category-social-media-cn"      # 国内社交媒体
+    - "geosite:category-netdisk-cn"           # 国内网盘
+    - "geosite:category-mobile-repair"        # 手机维修/服务
+    - "geosite:category-food-cn"              # 国内美食/外卖
+    - "geosite:category-electronic-cn"        # 国内电商/数码
+    - "geosite:category-companies"            # 企业官网
+    - "geosite:category-automobile-cn"        # 国内汽车
+    - "geosite:category-ai-cn"                # 国内AI服务
+    - "geosite:category-android-app-download" # 应用下载
+    - "geosite:category-cdn-cn"               # 国内CDN
+    - "geosite:category-forums"               # 国内论坛
+    - "geosite:category-logistics-cn"         # 国内物流
+    - "geosite:category-web-archive"          # 网络存档    
+  # 开启/关闭Geosite启动全量预加载（解决重启CPU/内存爆满）
+  # 优点：重启不卡、不爆内存、低负载运行
+  # 缺点：首次访问国内域名极轻微延迟，二次访问恢复极速
+  # true为开机一次性把所有 geosite 域名库全加载进内存
+  geosite-preload: true
+
+  # 默认国内DNS
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  # 日常解析使用国内DNS
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  # 国外域名备用DNS
+  fallback:
+    - https://cloudflare-dns.com/dns-query
+    - https://dns.google/dns-query
+    - 8.8.8.8          # 备用纯IP DNS，更稳定
+    - 1.1.1.1
+  # 国内IP强制走国内DNS
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    ipcidr:
+      - 240.0.0.0/12
+    check: true  #解析失败自动切境外DNS，解决国内被墙/污染域名
+
+  # ==============================================
+  # 【Fake-IP-DNS解析白名单】
+  # 作用：域名不走虚拟假IP，强制真实DNS解析
+  # 解决网站跳转反诈网站 跳转被多人举报页面问题
+  # 需要与380行rules白名单配合使用
+  # 解决开C后网站打不开、解析失败问题
+  # 新增打不开的域名直接在这里添加
+  # ==============================================
+  nameserver-policy:
+    # 苹果全套走国内解析    
+    "geosite:apple-cn": [223.5.5.5, 119.29.29.29]   
+    # 腾讯全系游戏专属国内纯净DNS
+    "geosite:tencent": [223.5.5.5, 119.29.29.29]
+    # Steam平台全系走国内DNS解析
+    "geosite:steam": [223.5.5.5, 119.29.29.29]
+    # 游戏走国内解析       
+    "geosite:category-games": [223.5.5.5, 119.29.29.29]
+    # 国服游戏加速器/更新/下载 直连国内DNS
+    "geosite:category-game-accelerator-cn": [223.5.5.5, 119.29.29.29]
+    # 游戏下载 直连国内DNS
+    "geosite:category-game-platforms-download": [223.5.5.5, 119.29.29.29]
+    # ==================== 国外全站 防污染 DNS ====================
+    # Telegram全系防污染
+    "geosite:telegram": ["https://cloudflare-dns.com/dns-query","https://dns.google/dns-query"]
+    # GitHub全系解决时好时坏DNS污染
+    "geosite:github": ["https://dns.google/dns-query", "https://cloudflare-dns.com/dns-query"]
+    # Google全家防污染
+    "geosite:google": ["https://dns.google/dns-query", "https://cloudflare-dns.com/dns-query"]
+    # YouTube 全套强制境外DoH 稳出IPv6
+    "geosite:youtube": ["https://dns.google/dns-query","https://cloudflare-dns.com/dns-query"]
+    # Facebook/Instagram 全系强制境外 DoH 拿 IPv6
+    "geosite:meta": ["https://dns.google/dns-query","https://cloudflare-dns.com/dns-query"]
+    # TikTok养号 → 强制走代理DNS
+    "geosite:tiktok": "proxy"
+# ==============================
+    # 兜底备用，万一有漏网的海外域名
+    "geosite:china-list": [223.5.5.5, 119.29.29.29]
+    "geosite:geolocation-!cn": ["https://cloudflare-dns.com/dns-query","https://dns.google/dns-query"]
+# ==============================
+    # 自定义白名单站点强制解析指定ip
+    # 格式示例 前面网址 后面解析ip
+    # "xxx.com": [223.5.5.5, 119.29.29.29]
+    # "*.xxx.com": [223.5.5.5, 119.29.29.29]
+# ==============================
+    # 自用dns解析白名单
+    "ipin.io": [223.5.5.5, 119.29.29.29]
+    "*.ipin.io": [223.5.5.5, 119.29.29.29]
+# ==============================
+# 远程规则订阅库
+# GitHub 官方原生地址
+# 统一 delay-check: 60 秒 → 开机先缓存/节点/测速，再拉规则
+# 全部 lazy: true 延迟懒加载，避免启动卡顿
+# ==============================
+#rule-providers:
+#  # 内网私有地址规则：匹配私有域名直连
+#  private:
+#    type: http
+#    behavior: domain
+#    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/private.txt"
+#    path: ./ruleset/private.txt
+#    interval: 86400          # 24小时更新一次
+#    proxy: PROXY              # 规则下载走代理分组
+#    proxy-respect-rules: true # 下载请求遵循全局分流
+#    lazy: true                # 启动不立即拉取，延迟加载
+#    delay-check: 240           # 开机240秒后再拉取此规则
+#    dns-respect-rules: true   # 规则解析遵守分流规则
+
+# ==============================
+# 全局顶级：geox数据库
+# ==============================
+geox-url:
+#  geoip: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+#  geosite: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+  geoip: "https://testingcf.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geoip.dat"
+  geosite: "https://testingcf.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geosite.dat"  
+
+# ==============================
+# 最终分流执行顺序规则
+# ==============================================
+# 【rules路由强制白名单】
+# 作用：强制该域名全程直连，不走任何代理
+# 和上面DNS白名单搭配使用，完美兼容Fake-IP
+# ==============================================
+rules:
+# ==============================================
+ #【忽略广告网站域名白名单】         不想网站过滤广告加这里
+ # - DOMAIN等于单独一个完整域名 DOMAIN-SUFFIX等于后缀域名
+ # 自用
+  - DOMAIN,dc.sigmob.cn,DOMESTIC         # 单独允许一个广告 看广告领取会员用的  
+  - IP-CIDR,192.168.1.2/32,DIRECT,no-resolve
+# ==============================================
+#  系统规则 分流顺序从上往下依次判断
+# ==============================================
+  - GEOSITE,private,DIRECT               # 内网地址直连
+  - GEOIP,private,DIRECT,no-resolve      # 局域网IP直连
+  - DOMAIN-SUFFIX,lan,DIRECT             # 系统网络禁止代理
+  - DOMAIN-SUFFIX,local,DIRECT           # 系统网络禁止代理
+  - GEOSITE,category-ads-all,REJECT      # 全局所有广告域名统一拦截屏蔽
+# ==============================================  
+ #【手动白名单网站】不想网站走代理/强制走代理加这里
+ #  - IP-CIDR,91.108.0.0/16,PROXY,no-resolve     # telegram强制代理
+ #  - IP-CIDR,149.154.0.0/16,PROXY,no-resolve    # telegram强制代理
+  - DOMAIN-SUFFIX,steampowered.com,PROXY         # steam商店代理
+  - DOMAIN-SUFFIX,steamcommunity.com,PROXY       # steam社区代理
+  - DOMAIN-SUFFIX,ipin.io,DOMESTIC               # ip网站直连防污染
+# ==============================================  
+# 游戏大陆节点直连 用户组
+  - GEOSITE,steam@cn,DOMESTIC                                # steam直连
+  - GEOSITE,category-games,DOMESTIC                          # 游戏直连  
+  - GEOSITE,category-games@cn,DOMESTIC                       # 游戏直连
+  - GEOSITE,category-game-accelerator-cn,DOMESTIC            # 加速器直连
+  - GEOSITE,category-game-platforms-download,DOMESTIC        # 游戏下载直连
+# ==============================================
+  # 国内专属域名直连 系统组
+  - GEOSITE,apple-cn,DOMESTIC              # 苹果直连
+  - GEOSITE,google-cn,DOMESTIC             # 谷歌国内直连
+  - GEOSITE,win-update,DOMESTIC            # Windows 更新直连
+  - GEOSITE,onedrive,DOMESTIC              # OneDrive国内服务走国内分组
+  - GEOSITE,microsoft@cn,DOMESTIC          # 微软国内服务走国内分组
+# ==============================================
+  - GEOSITE,china-list,DOMESTIC            #系统组 所有可识别大陆域名，统一归入国内分组               
+# ==============================================  
+  # 国外专属域名直连 用户组
+  - GEOSITE,category-scholar-!cn,PROXY     # 海外学术科研类域名全部走代理
+# ==============================================  
+  - GEOSITE,gfw,PROXY                       #系统组 仅代理常用国外网站    
+#  - GEOSITE,geolocation-!cn,PROXY          #系统组 非大陆通用境外域名统一全代理
+# ==============================================
+# IP精准分流
+  - GEOIP,private,DIRECT,no-resolve         # 私有内网IP直连
+  - GEOIP,telegram,PROXY                    # TG专属IP强制代理
+#  - GEOIP,JP,PROXY                         # 日本IP走代理
+  - GEOIP,CN,DOMESTIC                       # 中国大陆IP → 国内组
+#  - GEOIP,!CN,PROXY                        # 境外IP → 代理组  
+routing:
+  complete-fallback: false       # 强制遍历完所有规则条目，命中规则停止
+  default-action: DOMESTIC       # 无匹配规则流量默认优先本地直连
+  default-proxy: PROXY           # 直连访问失败自动切换至外网代理组

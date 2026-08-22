@@ -1,0 +1,9 @@
+
+config schedule
+	option enabled '1'
+	option week '*'
+	option hour '5'
+	option minute '0'
+	option month '*'
+	option day '*'
+
