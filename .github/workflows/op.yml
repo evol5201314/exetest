@@ -7,7 +7,7 @@ on:
       OP_IP:
         description: '静态IP地址'     
         required: false
-        default: '192.168.1.2' 
+        default: '192.168.1.2'           # 改动行
         type: string
       OP_author:
         description: '定制作者'     
@@ -17,7 +17,7 @@ on:
       CUSTOM_PLUGINS:
         description: '自定义插件名称，用空格分隔'
         required: false
-        default: 'luci-app-nikki luci-theme-aurora luci-app-ttyd luci-app-diskman luci-app-irqbalance luci-app-filemanager luci-app-autoreboot python3-light python3-requests python3-bottle python3-pyserial libustream-mbedtls ca-bundle ca-certificates luci-app-commands'
+        default: 'luci-app-nikki luci-theme-aurora luci-app-ttyd luci-app-diskman luci-app-irqbalance luci-app-filemanager luci-app-autoreboot python3-light python3-requests python3-bottle python3-pyserial libustream-mbedtls ca-bundle ca-certificates luci-app-commands'           # 改动行
         type: string
 
 env:
@@ -113,7 +113,7 @@ jobs:
             ;;
         esac
         echo "release_tag=$_release_tag" >> $GITHUB_ENV  
-        
+    #  改动段落：关闭工具缓存功能 
     # 【禁用工具链缓存，使用原版无缓存逻辑】
     #- name: 取回缓存 staging_dir
     #  uses: actions/cache@v5
@@ -142,7 +142,7 @@ jobs:
         [ -e patch ] && cp -rf patch/nginx/luci.locations $SOURCE_NAME/feeds/packages/net/nginx/files-luci-support
         [ -e patch ] && cp -rf patch/nginx/uci.conf.template $SOURCE_NAME/feeds/packages/net/nginx-util/files
 
-    # 你的原版新增：清理 Go 编译缓存
+    # 改动新增段落：清理 Go 编译缓存        
     - name: 清理 Go 编译缓存
       run: |
         cd $SOURCE_NAME
@@ -228,7 +228,7 @@ jobs:
     - name: 清理Releases
       uses: gzk47/delete-older-releases@v0.3.5
       with:
-        keep_latest: 2
+        keep_latest: 2           # 改动行
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
