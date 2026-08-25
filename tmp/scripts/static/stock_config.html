@@ -1,0 +1,135 @@
+<div class="modal active" id="stockConfigModal" style="display:none;">
+<div class="modal-box" style="max-width:950px;">
+<span class="close" onclick="window.closeStockModal()">&times;</span>
+<h2>📈 行情参数修改</h2>
+<p style="font-size:13px;color:#888;margin-bottom:12px;">修改后点保存，下次运行脚本时生效。</p>
+<div style="margin-bottom:10px;"><label>Push Plus Token:</label><input type="text" id="cfg_push_token" style="width:100%;"></div>
+<h3 style="border-bottom:2px solid #667eea;padding-bottom:5px;">📊 股票监控</h3>
+<div id="stock_table"></div>
+<h3 style="border-bottom:2px solid #f44336;padding-bottom:5px;margin-top:15px;">🇺🇸 美股监控</h3>
+<div id="us_table"></div>
+<h3 style="border-bottom:2px solid #4caf50;padding-bottom:5px;margin-top:15px;">🪙 虚拟币监控</h3>
+<div id="crypto_table"></div>
+<div style="margin-top:15px;text-align:right;">
+<button onclick="window.saveStockConfig()" style="padding:8px 28px;border:none;border-radius:20px;cursor:pointer;font-size:14px;font-weight:500;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;">💾 保存所有参数</button>
+</div>
+</div>
+</div>
+
+<script>
+function renderTable(prefix, containerId) {
+    // 根据表格类型决定列数：美股5列，其他4列
+    var cols = (prefix === 'us') ? 5 : 4;
+    var headers = (prefix === 'us') 
+        ? '<div>雅虎代码</div><div>国内备用(新浪)</div><div>低于报警</div><div>高于报警</div><div>当前价位</div>'
+        : '<div>代码</div><div>低于报警</div><div>高于报警</div><div>当前价位</div>';
+
+    // 使用 1.5fr 1.5fr 1fr 1fr 1fr 的比例，为代码列留出更多空间
+    var gridCols = (prefix === 'us') ? '1.5fr 1.5fr 1fr 1fr 1fr' : '2fr 1fr 1fr 1fr';
+    var html = `<div style="display:grid;grid-template-columns:${gridCols};gap:5px;font-weight:bold;margin-bottom:5px;">${headers}</div>`;
+
+    for (var i = 0; i < 10; i++) {
+        var rowHtml = '';
+        if (prefix === 'us') {
+            rowHtml += `<input type="text" id="us_code_${i}" placeholder="雅虎代码">`;
+            rowHtml += `<input type="text" id="us_alt_${i}" placeholder="备用代码">`;
+            rowHtml += `<input type="number" id="us_low_${i}" placeholder="低于">`;
+            rowHtml += `<input type="number" id="us_high_${i}" placeholder="高于">`;
+            rowHtml += `<input type="text" id="us_price_${i}" readonly style="background:#f5f5f5;">`;
+        } else {
+            rowHtml += `<input type="text" id="${prefix}_code_${i}" placeholder="输入代码">`;
+            rowHtml += `<input type="number" id="${prefix}_low_${i}" placeholder="低于">`;
+            rowHtml += `<input type="number" id="${prefix}_high_${i}" placeholder="高于">`;
+            rowHtml += `<input type="text" id="${prefix}_price_${i}" readonly style="background:#f5f5f5;">`;
+        }
+        html += `<div style="display:grid;grid-template-columns:${gridCols};gap:5px;margin-bottom:4px;">${rowHtml}</div>`;
+    }
+    document.getElementById(containerId).innerHTML = html;
+}
+
+window.init_stockConfigModal = function() {
+    renderTable('stock', 'stock_table');
+    renderTable('us', 'us_table');
+    renderTable('crypto', 'crypto_table');
+
+    // 读配置填入框内
+    fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'monitor_stock.py', args: ['--get'] }) })
+    .then(r => r.json()).then(d => {
+        if (d.output) {
+            try {
+                var cfg = JSON.parse(d.output);
+                document.getElementById('cfg_push_token').value = cfg.PUSH_TOKEN || '';
+                
+                // 股票回填
+                for (var i = 0; i < 10; i++) {
+                    if (cfg.STOCK_CONFIG && cfg.STOCK_CONFIG[i]) { 
+                        document.getElementById(`stock_code_${i}`).value = cfg.STOCK_CONFIG[i][0] || ''; 
+                        document.getElementById(`stock_low_${i}`).value = cfg.STOCK_CONFIG[i][1] > 0 ? cfg.STOCK_CONFIG[i][1] : ''; 
+                        document.getElementById(`stock_high_${i}`).value = cfg.STOCK_CONFIG[i][2] > 0 ? cfg.STOCK_CONFIG[i][2] : ''; 
+                    }
+                }
+
+                // 美股回填（注意：现在是4个字段 [雅虎, 备用, 低, 高]）
+                for (var i = 0; i < 10; i++) {
+                    if (cfg.US_CONFIG && cfg.US_CONFIG[i]) { 
+                        document.getElementById(`us_code_${i}`).value = cfg.US_CONFIG[i][0] || ''; 
+                        document.getElementById(`us_alt_${i}`).value = cfg.US_CONFIG[i][1] || ''; 
+                        document.getElementById(`us_low_${i}`).value = cfg.US_CONFIG[i][2] > 0 ? cfg.US_CONFIG[i][2] : ''; 
+                        document.getElementById(`us_high_${i}`).value = cfg.US_CONFIG[i][3] > 0 ? cfg.US_CONFIG[i][3] : ''; 
+                    }
+                }
+
+                // 虚拟币回填
+                for (var i = 0; i < 10; i++) {
+                    if (cfg.CRYPTO_CONFIG && cfg.CRYPTO_CONFIG[i]) { 
+                        document.getElementById(`crypto_code_${i}`).value = cfg.CRYPTO_CONFIG[i][0] || ''; 
+                        document.getElementById(`crypto_low_${i}`).value = cfg.CRYPTO_CONFIG[i][1] > 0 ? cfg.CRYPTO_CONFIG[i][1] : ''; 
+                        document.getElementById(`crypto_high_${i}`).value = cfg.CRYPTO_CONFIG[i][2] > 0 ? cfg.CRYPTO_CONFIG[i][2] : ''; 
+                    }
+                }
+            } catch(e) { console.log(e); }
+        }
+    });
+
+    // 拉取价格（强制填值或显示错误）
+    fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'monitor_stock.py', args: ['--get-price'] }) })
+    .then(r => r.json()).then(d => {
+        if (d.output) {
+            try {
+                var prices = JSON.parse(d.output);
+                for (var i = 0; i < 10; i++) {
+                    var code = document.getElementById(`stock_code_${i}`).value;
+                    if (code) document.getElementById(`stock_price_${i}`).value = prices.stocks[code] || "查无";
+                    
+                    // 美股直接用雅虎代码查价格，如果雅虎代码查不到，可以根据备用代码判断
+                    var uc = document.getElementById(`us_code_${i}`).value;
+                    if (uc) document.getElementById(`us_price_${i}`).value = prices.us[uc] || "查无";
+                    
+                    var cc = document.getElementById(`crypto_code_${i}`).value;
+                    if (cc) document.getElementById(`crypto_price_${i}`).value = prices.crypto[cc] || "查无";
+                }
+            } catch(e) { console.log(e); }
+        }
+    }).catch(e => console.log(e));
+};
+
+window.closeStockModal = function() { document.getElementById('stockConfigModal').style.display = 'none'; };
+
+window.saveStockConfig = function() {
+    var s = [], u = [], c = [];
+    
+    // 收集股票
+    for (var i=0; i<10; i++) { s.push([document.getElementById(`stock_code_${i}`).value.trim(), document.getElementById(`stock_low_${i}`).value||0, document.getElementById(`stock_high_${i}`).value||0]); }
+    
+    // 收集美股（包含备用代码字段）
+    for (var i=0; i<10; i++) { u.push([document.getElementById(`us_code_${i}`).value.trim(), document.getElementById(`us_alt_${i}`).value.trim(), document.getElementById(`us_low_${i}`).value||0, document.getElementById(`us_high_${i}`).value||0]); }
+    
+    // 收集虚拟币
+    for (var i=0; i<10; i++) { c.push([document.getElementById(`crypto_code_${i}`).value.trim(), document.getElementById(`crypto_low_${i}`).value||0, document.getElementById(`crypto_high_${i}`).value||0]); }
+    
+    var data = { "PUSH_TOKEN": document.getElementById('cfg_push_token').value, "STOCK_CONFIG": s, "US_CONFIG": u, "CRYPTO_CONFIG": c };
+    
+    fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'monitor_stock.py', args: ['--set', JSON.stringify(data)] }) })
+    .then(r => r.json()).then(d => { alert(d.output || '保存成功'); window.closeStockModal(); });
+};
+</script>
