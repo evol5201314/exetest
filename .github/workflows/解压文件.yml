@@ -1,7 +1,7 @@
-name: 手动解压文件到项目
+name: 解压仓库内的 zip
 
 on:
-  workflow_dispatch:    # 只有手动点击才能运行
+  workflow_dispatch          # 手动触发
 
 jobs:
   unzip:
@@ -10,21 +10,17 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 下载并解压 tmp.zip
+      - name: 解压 tmp.zip 到 tmp 目录
         run: |
-          # 安装 unzip（默认已装，以防万一）
-          sudo apt-get update && sudo apt-get install -y unzip
-          # 下载 zip 文件到当前仓库根目录
-          curl -L -o tmp.zip https://github.com/evol5201314/exetest/raw/refs/heads/main/tmp.zip
-          # 解压到 ./tmp 目录（如果文件夹不存在会自动创建）
+          # 如果 tmp.zip 在根目录，直接解压
           unzip -o tmp.zip -d ./tmp
-          # 删除下载的 zip，保持整洁
+          # 删除原 zip（可选）
           rm tmp.zip
 
-      - name: 提交并推送解压后的文件（可选）
+      - name: 提交变更
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add tmp/
-          git diff --staged --quiet || git commit -m "解压 tmp.zip 到 tmp 目录"
+          git diff --staged --quiet || git commit -m "解压 tmp.zip"
           git push
