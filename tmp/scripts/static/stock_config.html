@@ -1,48 +1,79 @@
-<div class="modal active" id="stockConfigModal" style="display:none;">
-<div class="modal-box" style="max-width:950px;">
-<span class="close" onclick="window.closeStockModal()">&times;</span>
-<h2>📈 行情参数修改</h2>
-<p style="font-size:13px;color:#888;margin-bottom:12px;">修改后点保存，下次运行脚本时生效。</p>
-<div style="margin-bottom:10px;"><label>Push Plus Token:</label><input type="text" id="cfg_push_token" style="width:100%;"></div>
-<h3 style="border-bottom:2px solid #667eea;padding-bottom:5px;">📊 股票监控</h3>
+<div class="modal active" id="stockConfigModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;">
+<div class="modal-box" style="max-width:720px;width:94%;background:#ffffff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,0.15);padding:16px;box-sizing:border-box;max-height:85vh;overflow-y:auto;">
+<span class="close" onclick="window.closeStockModal()" style="float:right;font-size:22px;cursor:pointer;color:#999;line-height:14px;margin:-4px -4px 4px 0;transition:color 0.2s;">×</span>
+<h2 style="margin:0 0 4px 0;font-size:17px;color:#222;">📈 行情参数修改</h2>
+<p style="font-size:12px;color:#777;margin:0 0 14px 0;">修改后点击保存，下次运行监控脚本生效。</p>
+
+<div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <label style="font-size:14px;color:#333;font-weight:500;">开启消息推送</label>
+    <input type="checkbox" id="cfg_push_enable" style="width:18px;height:18px;cursor:pointer;">
+</div>
+
+<div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <label style="font-size:14px;color:#333;font-weight:500;">调试输出(VERBOSE_LOG)</label>
+    <input type="checkbox" id="cfg_verbose_log" style="width:18px;height:18px;cursor:pointer;">
+    <span style="font-size:12px;color:#777;">开启打印日志；关闭完全静默无输出</span>
+</div>
+
+<div style="margin-bottom:14px;">
+    <label style="display:block;margin-bottom:5px;font-size:14px;color:#333;font-weight:500;">Push Plus Token</label>
+    <input type="text" id="cfg_push_token" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid #ddd;border-radius:7px;font-size:14px;outline:none;transition:border 0.2s;" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#ddd'">
+</div>
+
+<h3 style="border-left:4px solid #667eea;padding:4px 0 4px 10px;color:#222;font-size:14px;margin:16px 0 8px 0;background:#f7f8ff;border-radius:0 7px 7px 0;">📊 股票监控</h3>
 <div id="stock_table"></div>
-<h3 style="border-bottom:2px solid #f44336;padding-bottom:5px;margin-top:15px;">🇺🇸 美股监控</h3>
+
+<h3 style="border-left:4px solid #f44336;padding:4px 0 4px 10px;color:#222;font-size:14px;margin:16px 0 8px 0;background:#fff7f7;border-radius:0 7px 7px 0;">🇺🇸 美股监控</h3>
 <div id="us_table"></div>
-<h3 style="border-bottom:2px solid #4caf50;padding-bottom:5px;margin-top:15px;">🪙 虚拟币监控</h3>
+
+<h3 style="border-left:4px solid #4caf50;padding:4px 0 4px 10px;color:#222;font-size:14px;margin:16px 0 8px 0;background:#f7fff8;border-radius:0 7px 7px 0;">🪙 虚拟币监控</h3>
 <div id="crypto_table"></div>
-<div style="margin-top:15px;text-align:right;">
-<button onclick="window.saveStockConfig()" style="padding:8px 28px;border:none;border-radius:20px;cursor:pointer;font-size:14px;font-weight:500;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;">💾 保存所有参数</button>
+
+<div style="margin-top:16px;text-align:right;">
+<button id="btn_save_stock" onclick="window.saveStockConfig()" style="padding:8px 24px;border:none;border-radius:18px;cursor:pointer;font-size:14px;font-weight:500;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;transition:opacity 0.2s;box-shadow:0 4px 12px rgba(102,126,234,0.3);">💾 保存所有参数</button>
 </div>
 </div>
 </div>
+
+<style>
+/* 去掉number输入框上下箭头 */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance:textfield;
+}
+.stock-row:hover input{
+  background-color:#fafafa !important;
+}
+</style>
 
 <script>
 function renderTable(prefix, containerId) {
-    // 根据表格类型决定列数：美股5列，其他4列
     var cols = (prefix === 'us') ? 5 : 4;
     var headers = (prefix === 'us') 
-        ? '<div>雅虎代码</div><div>国内备用(新浪)</div><div>低于报警</div><div>高于报警</div><div>当前价位</div>'
-        : '<div>代码</div><div>低于报警</div><div>高于报警</div><div>当前价位</div>';
-
-    // 使用 1.5fr 1.5fr 1fr 1fr 1fr 的比例，为代码列留出更多空间
+        ? '<div style="padding:6px 5px;">雅虎代码</div><div style="padding:6px 5px;">国内备用(新浪)</div><div style="padding:6px 5px;">低于报警</div><div style="padding:6px 5px;">高于报警</div><div style="padding:6px 5px;">当前价位</div>'
+        : '<div style="padding:6px 5px;">代码</div><div style="padding:6px 5px;">低于报警</div><div style="padding:6px 5px;">高于报警</div><div style="padding:6px 5px;">当前价位</div>';
     var gridCols = (prefix === 'us') ? '1.5fr 1.5fr 1fr 1fr 1fr' : '2fr 1fr 1fr 1fr';
-    var html = `<div style="display:grid;grid-template-columns:${gridCols};gap:5px;font-weight:bold;margin-bottom:5px;">${headers}</div>`;
-
+    var html = `<div style="display:grid;grid-template-columns:${gridCols};gap:4px;background:#f1f3f9;border-radius:8px;font-weight:600;color:#333;margin-bottom:4px;">${headers}</div>`;
     for (var i = 0; i < 10; i++) {
         var rowHtml = '';
+        var inputStyle = "box-sizing:border-box;width:100%;padding:6px 8px;border:1px solid #e2e2e2;border-radius:6px;font-size:13px;outline:none;transition:border 0.2s;";
         if (prefix === 'us') {
-            rowHtml += `<input type="text" id="us_code_${i}" placeholder="雅虎代码">`;
-            rowHtml += `<input type="text" id="us_alt_${i}" placeholder="备用代码">`;
-            rowHtml += `<input type="number" id="us_low_${i}" placeholder="低于">`;
-            rowHtml += `<input type="number" id="us_high_${i}" placeholder="高于">`;
-            rowHtml += `<input type="text" id="us_price_${i}" readonly style="background:#f5f5f5;">`;
+            rowHtml += `<input type="text" id="us_code_${i}" placeholder="雅虎代码" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+            rowHtml += `<input type="text" id="us_alt_${i}" placeholder="备用代码" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+            rowHtml += `<input type="number" id="us_low_${i}" placeholder="低于" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+            rowHtml += `<input type="number" id="us_high_${i}" placeholder="高于" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+            rowHtml += `<input type="text" id="us_price_${i}" readonly style="${inputStyle}background:#f5f6f8;color:#555;">`;
         } else {
-            rowHtml += `<input type="text" id="${prefix}_code_${i}" placeholder="输入代码">`;
-            rowHtml += `<input type="number" id="${prefix}_low_${i}" placeholder="低于">`;
-            rowHtml += `<input type="number" id="${prefix}_high_${i}" placeholder="高于">`;
-            rowHtml += `<input type="text" id="${prefix}_price_${i}" readonly style="background:#f5f5f5;">`;
+            rowHtml += `<input type="text" id="${prefix}_code_${i}" placeholder="输入代码" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+            rowHtml += `<input type="number" id="${prefix}_low_${i}" placeholder="低于" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+            rowHtml += `<input type="number" id="${prefix}_high_${i}" placeholder="高于" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+            rowHtml += `<input type="text" id="${prefix}_price_${i}" readonly style="${inputStyle}background:#f5f6f8;color:#555;">`;
         }
-        html += `<div style="display:grid;grid-template-columns:${gridCols};gap:5px;margin-bottom:4px;">${rowHtml}</div>`;
+        html += `<div class="stock-row" style="display:grid;grid-template-columns:${gridCols};gap:4px;margin-bottom:2px;">${rowHtml}</div>`;
     }
     document.getElementById(containerId).innerHTML = html;
 }
@@ -51,16 +82,16 @@ window.init_stockConfigModal = function() {
     renderTable('stock', 'stock_table');
     renderTable('us', 'us_table');
     renderTable('crypto', 'crypto_table');
-
-    // 读配置填入框内
     fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'monitor_stock.py', args: ['--get'] }) })
     .then(r => r.json()).then(d => {
         if (d.output) {
             try {
                 var cfg = JSON.parse(d.output);
                 document.getElementById('cfg_push_token').value = cfg.PUSH_TOKEN || '';
-                
-                // 股票回填
+                document.getElementById('cfg_push_enable').checked = !!cfg.PUSH_ENABLE;
+                // 回填调试输出开关
+                document.getElementById('cfg_verbose_log').checked = !!cfg.VERBOSE_LOG;
+
                 for (var i = 0; i < 10; i++) {
                     if (cfg.STOCK_CONFIG && cfg.STOCK_CONFIG[i]) { 
                         document.getElementById(`stock_code_${i}`).value = cfg.STOCK_CONFIG[i][0] || ''; 
@@ -68,8 +99,6 @@ window.init_stockConfigModal = function() {
                         document.getElementById(`stock_high_${i}`).value = cfg.STOCK_CONFIG[i][2] > 0 ? cfg.STOCK_CONFIG[i][2] : ''; 
                     }
                 }
-
-                // 美股回填（注意：现在是4个字段 [雅虎, 备用, 低, 高]）
                 for (var i = 0; i < 10; i++) {
                     if (cfg.US_CONFIG && cfg.US_CONFIG[i]) { 
                         document.getElementById(`us_code_${i}`).value = cfg.US_CONFIG[i][0] || ''; 
@@ -78,8 +107,6 @@ window.init_stockConfigModal = function() {
                         document.getElementById(`us_high_${i}`).value = cfg.US_CONFIG[i][3] > 0 ? cfg.US_CONFIG[i][3] : ''; 
                     }
                 }
-
-                // 虚拟币回填
                 for (var i = 0; i < 10; i++) {
                     if (cfg.CRYPTO_CONFIG && cfg.CRYPTO_CONFIG[i]) { 
                         document.getElementById(`crypto_code_${i}`).value = cfg.CRYPTO_CONFIG[i][0] || ''; 
@@ -90,8 +117,6 @@ window.init_stockConfigModal = function() {
             } catch(e) { console.log(e); }
         }
     });
-
-    // 拉取价格（强制填值或显示错误）
     fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'monitor_stock.py', args: ['--get-price'] }) })
     .then(r => r.json()).then(d => {
         if (d.output) {
@@ -101,7 +126,6 @@ window.init_stockConfigModal = function() {
                     var code = document.getElementById(`stock_code_${i}`).value;
                     if (code) document.getElementById(`stock_price_${i}`).value = prices.stocks[code] || "查无";
                     
-                    // 美股直接用雅虎代码查价格，如果雅虎代码查不到，可以根据备用代码判断
                     var uc = document.getElementById(`us_code_${i}`).value;
                     if (uc) document.getElementById(`us_price_${i}`).value = prices.us[uc] || "查无";
                     
@@ -117,17 +141,17 @@ window.closeStockModal = function() { document.getElementById('stockConfigModal'
 
 window.saveStockConfig = function() {
     var s = [], u = [], c = [];
-    
-    // 收集股票
     for (var i=0; i<10; i++) { s.push([document.getElementById(`stock_code_${i}`).value.trim(), document.getElementById(`stock_low_${i}`).value||0, document.getElementById(`stock_high_${i}`).value||0]); }
-    
-    // 收集美股（包含备用代码字段）
     for (var i=0; i<10; i++) { u.push([document.getElementById(`us_code_${i}`).value.trim(), document.getElementById(`us_alt_${i}`).value.trim(), document.getElementById(`us_low_${i}`).value||0, document.getElementById(`us_high_${i}`).value||0]); }
-    
-    // 收集虚拟币
     for (var i=0; i<10; i++) { c.push([document.getElementById(`crypto_code_${i}`).value.trim(), document.getElementById(`crypto_low_${i}`).value||0, document.getElementById(`crypto_high_${i}`).value||0]); }
-    
-    var data = { "PUSH_TOKEN": document.getElementById('cfg_push_token').value, "STOCK_CONFIG": s, "US_CONFIG": u, "CRYPTO_CONFIG": c };
+    var data = { 
+        "PUSH_ENABLE": document.getElementById("cfg_push_enable").checked,
+        "VERBOSE_LOG": document.getElementById("cfg_verbose_log").checked,
+        "PUSH_TOKEN": document.getElementById('cfg_push_token').value, 
+        "STOCK_CONFIG": s, 
+        "US_CONFIG": u, 
+        "CRYPTO_CONFIG": c 
+    };
     
     fetch('/api/run_tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ script: 'monitor_stock.py', args: ['--set', JSON.stringify(data)] }) })
     .then(r => r.json()).then(d => { alert(d.output || '保存成功'); window.closeStockModal(); });
