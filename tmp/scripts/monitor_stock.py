@@ -70,74 +70,80 @@ def load_config():
         return (False,
                 False,
                 "cdc7db6c36da46c1b877543016be3cba",
-                [["518880", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0]],
+                [["sh518880", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0]],
                 [["^IXIC", "us.IXIC", 0, 0], ["^GSPC", "us.INX", 0, 0], ["", "", 0, 0], ["", "", 0, 0], ["", "", 0, 0], ["", "", 0, 0], ["", "", 0, 0], ["", "", 0, 0], ["", "", 0, 0], ["", "", 0, 0]],
                 [["BTC", 0, 0], ["ETH", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0], ["", 0, 0]])
 PUSH_ENABLE, VERBOSE_LOG, PUSH_TOKEN, STOCK_CONFIG, US_CONFIG, CRYPTO_CONFIG = load_config()
-def get_a_stock_prev_close(code):
-    if code.startswith(("6", "50", "51")):
-        prefix = "sh"
-        secid = "1." + code
-    else:
-        prefix = "sz"
-        secid = "0." + code
+
+def resolve_tencent_code(raw_code):
+    """
+    完全不自动补前缀，输入原样返回，全部手动填写完整代码(sh/sz/hk/hf)
+    """
+    return raw_code.strip()
+
+def get_kline_prev_two_close(tencent_code):
+    """
+    web.ifzq.gtimg.cn fqkline/get 获取日K
+    return (yesterday_close(T‑1), prev_close(T‑2))
+    day item: [date,open,high,low,close,volume,...]  item[4]=收盘价
+    hf开头海外期货指数该K线接口会返回param error，直接返回(0.0,0.0)
+    """
+    yc = 0.0
+    pc = 0.0
+    if tencent_code.startswith("hf"):
+        return (yc, pc)
     try:
-        url = f"https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol={prefix}{code}&scale=240&ma=no&datalen=5"
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
-        data = r.json()
-        if data and len(data) >= 3:
-            return float(data[-3]["close"])
-    except Exception:
-        pass
-    try:
-        url = f"https://push2.eastmoney.com/api/qt/stock/kline/get?secid={secid}&fields1=f1&fields2=f51&klt=101&fqt=0&end=20990101&lmt=5"
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+        url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={tencent_code},day,,,30,"
+        r = requests.get(url, headers=TENCENT_HEADERS, timeout=8)
         j = r.json()
-        klines = j.get("data", {}).get("klines", [])
-        if len(klines) >= 3:
-            third_last = klines[-3].split(",")
-            return float(third_last[2])
+        stock_node = j.get("data", {}).get(tencent_code, {})
+        day_list = stock_node.get("day", [])
+        if len(day_list) >= 2:
+            yc = float(day_list[-2][4])
+        if len(day_list) >= 3:
+            pc = float(day_list[-3][4])
     except Exception:
         pass
-    return 0.0
+    return (yc, pc)
+
 def fetch_a_stock_price(code):
-    if code.startswith(("6", "50", "51")):
-        prefix = "sh"
-    else:
-        prefix = "sz"
+    tencent_code = resolve_tencent_code(code)
     try:
-        r = requests.get(f"http://hq.sinajs.cn/list={prefix}{code}", headers={"User-Agent": "Mozilla/5.0", "Referer": "http://finance.sina.com.cn"}, timeout=8)
-        r.encoding = 'gbk'
-        text = r.text.replace('\u0000', '').strip()
+        r = requests.get(f"http://qt.gtimg.cn/q={tencent_code}", headers=TENCENT_HEADERS, timeout=8)
+        text = r.text.replace("\x00","").strip()
         if '="' in text:
-            arr = text.split('="')[1].split('"')[0].split(",")
-            if len(arr) > 3 and arr[3] and arr[3] != "0.00":
+            body = text.split('="')[1].split('"')[0]
+            arr = body.split("~")
+            if len(arr)>=4 and arr[3]:
                 return str(float(arr[3]))
-            elif len(arr) > 2 and arr[2] and arr[2] != "0.00":
-                return str(float(arr[2]))
     except Exception:
         pass
     return "查无"
+
 def get_a_stock_detail(code):
-    if code.startswith(("6", "50", "51")):
-        prefix = "sh"
-    else:
-        prefix = "sz"
+    tencent_code = resolve_tencent_code(code)
     name = code
     current = 0.0
     yesterday = 0.0
+    prev_close = 0.0
+    # qt接口拿名称、现价、兜底昨收
     try:
-        r = requests.get(f"http://hq.sinajs.cn/list={prefix}{code}", headers={"User-Agent": "Mozilla/5.0", "Referer": "http://finance.sina.com.cn"}, timeout=8)
-        r.encoding = 'gbk'
-        text = r.text.replace('\u0000', '').strip()
+        r = requests.get(f"http://qt.gtimg.cn/q={tencent_code}", headers=TENCENT_HEADERS, timeout=8)
+        text = r.text.replace("\x00","").strip()
         if '="' in text:
-            arr = text.split('="')[1].split('"')[0].split(",")
-            name = arr[0]
-            current = float(arr[3]) if arr[3] else 0.0
-            yesterday = float(arr[2]) if arr[2] else 0.0
+            body = text.split('="')[1].split('"')[0]
+            arr = body.split("~")
+            name = arr[1] if len(arr)>1 else code
+            current = float(arr[3]) if (len(arr)>3 and arr[3]) else 0.0
+            yesterday = float(arr[4]) if (len(arr)>4 and arr[4]) else 0.0
     except Exception:
         pass
-    prev_close = get_a_stock_prev_close(code)
+    # K线接口优先取真实昨日、前日收盘价
+    kl_yc, kl_pc = get_kline_prev_two_close(tencent_code)
+    if kl_yc > 1e-6:
+        yesterday = kl_yc
+    if kl_pc > 1e-6:
+        prev_close = kl_pc
     today_pct = ((current - yesterday) / yesterday * 100) if yesterday else 0.0
     yesterday_pct = ((yesterday - prev_close) / prev_close * 100) if prev_close > 1e-6 else None
     return {
@@ -149,6 +155,7 @@ def get_a_stock_detail(code):
         "today_pct": today_pct,
         "yesterday_pct": yesterday_pct
     }
+
 def fetch_us_price(yahoo_code, tencent_backup_code):
     try:
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_code}?range=5d&interval=1d"
@@ -321,6 +328,7 @@ if __name__ == "__main__":
             "CRYPTO_CONFIG": CRYPTO_CONFIG
         }, ensure_ascii=False))
         sys.exit(0)
+
     if args.set:
         try:
             new_config = json.loads(args.set)
@@ -339,6 +347,7 @@ if __name__ == "__main__":
         except Exception:
             pass
         sys.exit(0)
+
     if args.get_price:
         result = {"stocks": {}, "us": {}, "crypto": {}}
         for cfg in STOCK_CONFIG:
@@ -364,6 +373,7 @@ if __name__ == "__main__":
                     result["crypto"][code] = "查无"
         print(json.dumps(result, ensure_ascii=False))
         sys.exit(0)
+
     # =========手动强制推送模式=========
     if args.manual_push:
         rep = build_full_report()
