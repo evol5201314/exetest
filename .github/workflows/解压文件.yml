@@ -1,7 +1,7 @@
 name: 解压仓库内的 zip
 
 on:
-  workflow_dispatch          # 手动触发
+  workflow_dispatch
 
 jobs:
   unzip:
@@ -10,17 +10,19 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 解压 tmp.zip 到 tmp 目录
+      - name: 解压 tmp.zip 到根目录（生成单个 tmp 文件夹）
         run: |
-          # 如果 tmp.zip 在根目录，直接解压
-          unzip -o tmp.zip -d ./tmp
-          # 删除原 zip（可选）
+          # 如果有旧的 tmp 目录，先删除（避免冲突）
+          rm -rf tmp
+          # 解压到当前目录，zip 内部的 tmp/ 会出现在根目录
+          unzip -o tmp.zip -d .
+          # 删除原 zip 文件
           rm tmp.zip
 
-      - name: 提交变更
+      - name: 提交并推送
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add tmp/
-          git diff --staged --quiet || git commit -m "解压 tmp.zip"
+          git diff --staged --quiet || git commit -m "解压 tmp.zip 到 tmp 目录"
           git push
