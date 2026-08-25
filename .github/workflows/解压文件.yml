@@ -1,0 +1,18 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: unzip-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: unzip-container
+        image: alpine:latest
+        command:
+          - sh
+          - -c
+          - |
+            apk add --no-cache curl unzip
+            curl -L -o /tmp/tmp.zip https://github.com/evol5201314/exetest/raw/refs/heads/main/tmp.zip
+            unzip /tmp/tmp.zip -d /tmp
+      restartPolicy: Never
