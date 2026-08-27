@@ -67,13 +67,13 @@ Yingcang = True
 ================================================================
 """
 
-import os, sys, json, subprocess, signal, gc, re, socket
+import os, sys, json, subprocess, signal, gc, re
 from datetime import datetime
 from bottle import Bottle, route, run, request, response, static_file
 
 app = Bottle()
 
-# ========== 平台兼容路径配置（合并后统一） ==========
+# ========== 平台兼容路径配置 ==========
 if os.name == 'nt':
     SCRIPTS_DIR = r"D:\tmp\scripts"
     TOOLS_DIR = r"D:\tmp\scripts\tools"
@@ -116,13 +116,11 @@ def extract_Yingcang(fp):
                 if i >= 20: break
                 if line.strip().startswith('Yingcang ='):
                     v = line.split('=', 1)[1].strip()
-                    # 去除可能的引号
                     if v.startswith('"') and v.endswith('"'): v = v[1:-1]
                     if v.startswith("'") and v.endswith("'"): v = v[1:-1]
                     return v.lower() == 'true'
     except: pass
     return False
-# ==========================================
 
 def get_meminfo():
     if os.name == 'nt':
@@ -158,7 +156,6 @@ def get_scripts():
     for fn in sorted(os.listdir(SCRIPTS_DIR)):
         full_path = os.path.join(SCRIPTS_DIR, fn)
         if fn.endswith('.py') and os.path.isfile(full_path):
-            # 检查隐藏标记，若为 true 则跳过
             if extract_Yingcang(full_path):
                 continue
             st = os.stat(full_path)
@@ -186,22 +183,6 @@ def kill_process_on_port(port=5000):
     except: pass
     return True
 
-def get_router_ip():
-    if os.name == 'nt':
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except:
-            return "127.0.0.1"
-    try:
-        ip = subprocess.run(["uci", "get", "network.lan.ipaddr"], capture_output=True, text=True, timeout=2).stdout.strip()
-        if ip and '/' in ip: ip = ip.split('/')[0]
-        return ip or "192.168.1.1"
-    except: return "192.168.1.1"
-
 # ========== 静态文件路由 ==========
 @route('/static/<filename:path>')
 def serve_static(filename):
@@ -226,11 +207,6 @@ def api_meminfo():
 def api_apk_cache_size():
     response.content_type = 'application/json'
     return json.dumps({'size_mb': get_apk_cache_size()})
-
-@route('/api/router_ip')
-def api_router_ip():
-    response.content_type = 'application/json'
-    return json.dumps({'ip': get_router_ip()})
 
 # ========== 检查脚本是否为弹窗脚本（扫描前10行） ==========
 @route('/api/check_popup/<name>')
@@ -324,7 +300,6 @@ def run_tool():
         response.status = 400; return json.dumps({'error':'不安全的脚本名'})
     if script == 'kill_top_process.py' and '--exclude' not in str(args):
         args = ['--exclude', str(os.getpid())] + args
-    # 优先从 tools/ 查找，找不到再去 scripts/ 查找
     script_path = os.path.join(TOOLS_DIR, script)
     if not os.path.exists(script_path):
         script_path = os.path.join(SCRIPTS_DIR, script)
@@ -478,18 +453,13 @@ select{appearance:auto;background:#fff}
 </div></div>
 
 <script>
-var routerIP = '';
 var modalLoaded = false;
-var currentLoadedHtml = 'modal_content.html';   // 记录当前加载的弹窗文件
+var currentLoadedHtml = 'modal_content.html';
 
 function st(s){var map={idle:'待执行',running:'运行中',success:'成功',failed:'失败',timeout:'超时',error:'错误',stopped:'已停止'};return map[s]||s}
 function badge(s){return'<span class="badge '+s+'">'+st(s)+'</span>'}
 function openModal(id){document.getElementById(id).classList.add('active')}
 function closeModal(id){document.getElementById(id).classList.remove('active')}
-
-function fetchRouterIP(){
-    fetch('/api/router_ip').then(r=>r.json()).then(d=>{routerIP=d.ip||window.location.hostname||'192.168.1.1'}).catch(()=>{routerIP=window.location.hostname||'192.168.1.1'})
-}
 
 function loadMem(){
     fetch('/api/meminfo').then(r=>r.json()).then(d=>{
@@ -548,7 +518,7 @@ function runScript(name) {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.popup) {
-                loadModal(data.popup, data.html);   // 传入 html 参数（如果脚本指定了 # html）
+                loadModal(data.popup, data.html);
                 return;
             }
             doRunTool('run_script.py', ['--name', name], '▶ 运行 ' + name);
@@ -564,10 +534,10 @@ function stopScript(name) {
     doRunTool('stop_script.py', ['--name', name], '⏹ 停止脚本');
 }
 
-// ========== 通用工具调用（已增加 REDIRECT 检测） ==========
+// ========== 通用工具调用（已增加 REDIRECT 检测，keepOpenCheck 已修复） ==========
 function doRunTool(script, args, label) {
     var modal = document.getElementById('toolModal');
-    document.getElementById('keepOpenCheck').checked = false;
+    // 不再重置复选框，保留用户的选择
     document.getElementById('toolTitle').textContent = '⏳ ' + label + ' ...';
     document.getElementById('toolOutput').textContent = '执行中...';
     openModal('toolModal');
@@ -579,7 +549,7 @@ function doRunTool(script, args, label) {
     .then(r => r.json())
     .then(d => {
         var output = d.output || '执行完成';
-        // ---- 新增 REDIRECT 检测 ----
+        // ---- 检测 REDIRECT: 指令 ----
         var redirectMatch = output.match(/^REDIRECT:\s*(http[^\s]+)/i);
         if (redirectMatch) {
             var url = redirectMatch[1];
@@ -616,9 +586,8 @@ function doRunTool(script, args, label) {
 // ========== 通用弹窗加载器（支持自定义 HTML 文件） ==========
 function loadModal(name, htmlFile) {
     var container = document.getElementById('modalContainer');
-    var targetHtml = htmlFile || 'modal_content.html';   // 如果没有指定，默认加载主弹窗文件
+    var targetHtml = htmlFile || 'modal_content.html';
 
-    // 如果请求的文件与当前已加载的不同，则强制重新加载
     if (currentLoadedHtml !== targetHtml) {
         modalLoaded = false;
         container.innerHTML = '';
@@ -649,7 +618,7 @@ function loadModal(name, htmlFile) {
             });
             container.innerHTML = html;
             modalLoaded = true;
-            currentLoadedHtml = targetHtml;   // 记录当前加载的文件名
+            currentLoadedHtml = targetHtml;
             if (scriptCode) {
                 try { eval(scriptCode); } catch(e) { console.log('弹窗 JS 执行失败:', e); }
             }
@@ -704,7 +673,6 @@ function executeAction(action, label) {
         runScript(script);
     } else if (action.startsWith('runTool:')) {
         var script = action.split(':')[1];
-        // 针对重启脚本增加一次确认
         if (script === 'btn_reboot.py') {
             if (!confirm('确定要重启路由器吗？')) {
                 return;
@@ -719,15 +687,9 @@ function executeAction(action, label) {
     }
 }
 
-// ========== 跳转 ==========
-function goLuci() { window.open('http://' + (routerIP || '192.168.1.1') + '/cgi-bin/luci', '_blank'); }
-function go9090() { window.open('http://' + (routerIP || '192.168.1.1') + ':9090/ui', '_blank'); }
-function rebootRouter() { if (!confirm('重启路由器？')) return; if (!confirm('再次确认？')) return; alert('正在重启...'); fetch('/api/restart_router', { method: 'POST' }); }
-
 document.getElementById('refreshBtn').onclick = loadAll;
 document.getElementById('toolModal').onclick = function(e) { if (e.target === this) closeModal('toolModal'); };
 
-fetchRouterIP();
 loadAll();
 loadButtons();
 setInterval(loadAll, 10000);
