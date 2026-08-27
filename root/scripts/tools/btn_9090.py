@@ -14,9 +14,9 @@ try:
     if ip and '/' in ip:
         ip = ip.split('/')[0]
 except:
-    ip = "192.168.1.1"
+    ip = "192.168.1.2"
 
 if not ip:
-    ip = "192.168.1.1"
+    ip = "192.168.1.2"
 
 print(f"REDIRECT:http://{ip}:9090/ui")
