@@ -45,27 +45,18 @@ input[type=number] {
 </style>
 <script>
 function renderTable(prefix, containerId) {
-    var cols = (prefix === 'us') ? 5 : 4;
-    var headers = (prefix === 'us')
-        ? '<div style="padding:6px 5px;">雅虎代码</div><div style="padding:6px 5px;">国内备用(腾讯)</div><div style="padding:6px 5px;">低于报警</div><div style="padding:6px 5px;">高于报警</div><div style="padding:6px 5px;">当前价位</div>'
-        : '<div style="padding:6px 5px;">代码</div><div style="padding:6px 5px;">低于报警</div><div style="padding:6px 5px;">高于报警</div><div style="padding:6px 5px;">当前价位</div>';
-    var gridCols = (prefix === 'us') ? '1.5fr 1.5fr 1fr 1fr 1fr' : '2fr 1fr 1fr 1fr';
+    // 全部统一5列：代码｜备注｜低于报警｜高于报警｜当前价位，均等1fr
+    var gridCols = '1fr 1fr 1fr 1fr 1fr';
+    var headers = '<div style="padding:6px 5px;">代码</div><div style="padding:6px 5px;">备注</div><div style="padding:6px 5px;">低于报警</div><div style="padding:6px 5px;">高于报警</div><div style="padding:6px 5px;">当前价位</div>';
     var html = `<div style="display:grid;grid-template-columns:${gridCols};gap:4px;background:#f1f3f9;border-radius:8px;font-weight:600;color:#333;margin-bottom:4px;">${headers}</div>`;
     for (var i = 0; i < 10; i++) {
         var rowHtml = '';
         var inputStyle = "box-sizing:border-box;width:100%;padding:6px 8px;border:1px solid #e2e2e2;border-radius:6px;font-size:13px;outline:none;transition:border 0.2s;";
-        if (prefix === 'us') {
-            rowHtml += `<input type="text" id="us_code_${i}" placeholder="雅虎代码" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
-            rowHtml += `<input type="text" id="us_alt_${i}" placeholder="备用代码" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
-            rowHtml += `<input type="number" id="us_low_${i}" placeholder="低于" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
-            rowHtml += `<input type="number" id="us_high_${i}" placeholder="高于" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
-            rowHtml += `<input type="text" id="us_price_${i}" readonly style="${inputStyle}background:#f5f6f8;color:#555;">`;
-        } else {
-            rowHtml += `<input type="text" id="${prefix}_code_${i}" placeholder="输入代码" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
-            rowHtml += `<input type="number" id="${prefix}_low_${i}" placeholder="低于" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
-            rowHtml += `<input type="number" id="${prefix}_high_${i}" placeholder="高于" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
-            rowHtml += `<input type="text" id="${prefix}_price_${i}" readonly style="${inputStyle}background:#f5f6f8;color:#555;">`;
-        }
+        rowHtml += `<input type="text" id="${prefix}_code_${i}" placeholder="代码" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+        rowHtml += `<input type="text" id="${prefix}_remark_${i}" placeholder="备注名称" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+        rowHtml += `<input type="number" id="${prefix}_low_${i}" placeholder="低于" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+        rowHtml += `<input type="number" id="${prefix}_high_${i}" placeholder="高于" style="${inputStyle}" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e2e2'">`;
+        rowHtml += `<input type="text" id="${prefix}_price_${i}" readonly style="${inputStyle}background:#f5f6f8;color:#555;">`;
         html += `<div class="stock-row" style="display:grid;grid-template-columns:${gridCols};gap:4px;margin-bottom:2px;">${rowHtml}</div>`;
     }
     document.getElementById(containerId).innerHTML = html;
@@ -85,14 +76,15 @@ window.init_stockConfigModal = function() {
                 for (var i = 0; i < 10; i++) {
                     if (cfg.STOCK_CONFIG && cfg.STOCK_CONFIG[i]) {
                         document.getElementById(`stock_code_${i}`).value = cfg.STOCK_CONFIG[i][0] || '';
-                        document.getElementById(`stock_low_${i}`).value = cfg.STOCK_CONFIG[i][1] > 0 ? cfg.STOCK_CONFIG[i][1] : '';
-                        document.getElementById(`stock_high_${i}`).value = cfg.STOCK_CONFIG[i][2] > 0 ? cfg.STOCK_CONFIG[i][2] : '';
+                        document.getElementById(`stock_remark_${i}`).value = cfg.STOCK_CONFIG[i][1] || '';
+                        document.getElementById(`stock_low_${i}`).value = cfg.STOCK_CONFIG[i][2] > 0 ? cfg.STOCK_CONFIG[i][2] : '';
+                        document.getElementById(`stock_high_${i}`).value = cfg.STOCK_CONFIG[i][3] > 0 ? cfg.STOCK_CONFIG[i][3] : '';
                     }
                 }
                 for (var i = 0; i < 10; i++) {
                     if (cfg.US_CONFIG && cfg.US_CONFIG[i]) {
                         document.getElementById(`us_code_${i}`).value = cfg.US_CONFIG[i][0] || '';
-                        document.getElementById(`us_alt_${i}`).value = cfg.US_CONFIG[i][1] || '';
+                        document.getElementById(`us_remark_${i}`).value = cfg.US_CONFIG[i][1] || '';
                         document.getElementById(`us_low_${i}`).value = cfg.US_CONFIG[i][2] > 0 ? cfg.US_CONFIG[i][2] : '';
                         document.getElementById(`us_high_${i}`).value = cfg.US_CONFIG[i][3] > 0 ? cfg.US_CONFIG[i][3] : '';
                     }
@@ -100,8 +92,9 @@ window.init_stockConfigModal = function() {
                 for (var i = 0; i < 10; i++) {
                     if (cfg.CRYPTO_CONFIG && cfg.CRYPTO_CONFIG[i]) {
                         document.getElementById(`crypto_code_${i}`).value = cfg.CRYPTO_CONFIG[i][0] || '';
-                        document.getElementById(`crypto_low_${i}`).value = cfg.CRYPTO_CONFIG[i][1] > 0 ? cfg.CRYPTO_CONFIG[i][1] : '';
-                        document.getElementById(`crypto_high_${i}`).value = cfg.CRYPTO_CONFIG[i][2] > 0 ? cfg.CRYPTO_CONFIG[i][2] : '';
+                        document.getElementById(`crypto_remark_${i}`).value = cfg.CRYPTO_CONFIG[i][1] || '';
+                        document.getElementById(`crypto_low_${i}`).value = cfg.CRYPTO_CONFIG[i][2] > 0 ? cfg.CRYPTO_CONFIG[i][2] : '';
+                        document.getElementById(`crypto_high_${i}`).value = cfg.CRYPTO_CONFIG[i][3] > 0 ? cfg.CRYPTO_CONFIG[i][3] : '';
                     }
                 }
             } catch(e) { console.log(e); }
@@ -136,9 +129,30 @@ window.manualPushStock = function(){
 window.closeStockModal = function() { document.getElementById('stockConfigModal').style.display = 'none'; };
 window.saveStockConfig = function() {
     var s = [], u = [], c = [];
-    for (var i=0; i<10; i++) { s.push([document.getElementById(`stock_code_${i}`).value.trim(), document.getElementById(`stock_low_${i}`).value||0, document.getElementById(`stock_high_${i}`).value||0]); }
-    for (var i=0; i<10; i++) { u.push([document.getElementById(`us_code_${i}`).value.trim(), document.getElementById(`us_alt_${i}`).value.trim(), document.getElementById(`us_low_${i}`).value||0, document.getElementById(`us_high_${i}`).value||0]); }
-    for (var i=0; i<10; i++) { c.push([document.getElementById(`crypto_code_${i}`).value.trim(), document.getElementById(`crypto_low_${i}`).value||0, document.getElementById(`crypto_high_${i}`).value||0]); }
+    for (var i=0; i<10; i++) {
+        s.push([
+            document.getElementById(`stock_code_${i}`).value.trim(),
+            document.getElementById(`stock_remark_${i}`).value.trim(),
+            document.getElementById(`stock_low_${i}`).value||0,
+            document.getElementById(`stock_high_${i}`).value||0
+        ]);
+    }
+    for (var i=0; i<10; i++) {
+        u.push([
+            document.getElementById(`us_code_${i}`).value.trim(),
+            document.getElementById(`us_remark_${i}`).value.trim(),
+            document.getElementById(`us_low_${i}`).value||0,
+            document.getElementById(`us_high_${i}`).value||0
+        ]);
+    }
+    for (var i=0; i<10; i++) {
+        c.push([
+            document.getElementById(`crypto_code_${i}`).value.trim(),
+            document.getElementById(`crypto_remark_${i}`).value.trim(),
+            document.getElementById(`crypto_low_${i}`).value||0,
+            document.getElementById(`crypto_high_${i}`).value||0
+        ]);
+    }
     var data = {
         "PUSH_ENABLE": document.getElementById("cfg_push_enable").checked,
         "VERBOSE_LOG": document.getElementById("cfg_verbose_log").checked,
