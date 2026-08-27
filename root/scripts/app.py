@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-beizhu = "📈 面板核心（Bottle 轻量化版本）"
+beizhu = "📈 面板核心（路由器Bottle 轻量化版本）"
+Yingcang = True
 """
 ================================================================
 ⚠️ 面板核心原则：轻量化是绝对核心 请勿删除或违反以下规则
@@ -18,6 +18,7 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
   4. 主面板 app.py 只负责：路由 + 调用独立脚本 + 显示结果
   5. 所有独立脚本放在 /root/scripts/tools/ 目录下
   6. 所有弹窗 HTML 动态加载，不写死在主面板中
+  7. 脚本隐藏：在脚本前20行内添加 Yingcang = true，该脚本将不出现在脚本清单中（仅检测前20行，节约性能）
 
 【弹窗脚本添加规范】（所有功能统一走此规范）
   1. 在 tools/ 下的脚本前10行内添加 # popup: 弹窗ID 声明
@@ -41,6 +42,16 @@ beizhu = "📈 面板核心（Bottle 轻量化版本）"
      # action: runScript:脚本名.py 或 runTool:脚本名.py 或 func:函数名
      # btn-class: 颜色类名（btn-blue, btn-green, btn-red 等）
   2. app.py 会自动扫描生成按钮，无需手动修改 HTML
+  3. 所有按钮的动作完全由脚本自身的 # action 决定，面板不做任何强制覆盖，保证最大灵活性。
+
+【脚本输出指令规范】（用于工具脚本 runTool 执行后的输出解析）
+  1. 脚本执行后，若输出以 REDIRECT: 开头（后接完整 URL），面板前端将自动在新标签页打开该 URL，并自动关闭执行弹窗（2秒后）。
+  2. 此机制可用于实现“一键跳转”功能，无需在面板中写死任何 URL 或前端函数。
+  3. 未来可扩展其他指令（如 POPUP:xxx），只要在前端 doRunTool 中增加相应解析即可。
+
+【特殊按钮交互增强】
+  1. 对于 btn_reboot.py（重启路由），executeAction 中会弹出一次确认框，确认后才执行脚本，避免误触。
+  2. 此确认逻辑仅针对该脚本，不影响其他任何 runTool 调用。
 
 【弹窗调用完整链路】
   1. 用户点击按钮/脚本卡片 → runScript('脚本名.py')
@@ -86,6 +97,26 @@ def extract_beizhu(fp):
     except: pass
     return None
 
+# ========== 提取隐藏标记 ==========
+def extract_Yingcang(fp):
+    """
+    读取脚本前20行，检测 Yingcang = true（不区分大小写）
+    若存在且值为 true 则返回 True，否则返回 False
+    """
+    try:
+        with open(fp, 'r', encoding='utf-8') as f:
+            for i, line in enumerate(f):
+                if i >= 20: break
+                if line.strip().startswith('Yingcang ='):
+                    v = line.split('=', 1)[1].strip()
+                    # 去除可能的引号
+                    if v.startswith('"') and v.endswith('"'): v = v[1:-1]
+                    if v.startswith("'") and v.endswith("'"): v = v[1:-1]
+                    return v.lower() == 'true'
+    except: pass
+    return False
+# ==========================================
+
 def get_meminfo():
     try:
         with open('/proc/meminfo', 'r') as f: lines = f.readlines()
@@ -117,6 +148,9 @@ def get_scripts():
     for fn in sorted(os.listdir(SCRIPTS_DIR)):
         full_path = os.path.join(SCRIPTS_DIR, fn)
         if fn.endswith('.py') and os.path.isfile(full_path):
+            # 检查隐藏标记，若为 true 则跳过
+            if extract_Yingcang(full_path):
+                continue
             st = os.stat(full_path)
             s = status_data.get(fn, {'status':'idle', 'pid':None})
             scripts.append({
@@ -178,7 +212,6 @@ def api_router_ip():
     return json.dumps({'ip': get_router_ip()})
 
 # ========== 检查脚本是否为弹窗脚本（扫描前10行） ==========
-# 同时支持读取 # html: 自定义文件名.html
 @route('/api/check_popup/<name>')
 def check_popup(name):
     if '/' in name or '\\' in name:
@@ -202,7 +235,7 @@ def check_popup(name):
     except: pass
     return json.dumps({'popup': popup_id, 'html': html_file})
 
-# ========== 获取动态按钮配置 ==========
+# ========== 获取动态按钮配置（完全由脚本的 # action 决定，无强制覆盖） ==========
 @route('/api/buttons')
 def api_buttons():
     buttons = {'script': [], 'router': []}
@@ -510,7 +543,7 @@ function stopScript(name) {
     doRunTool('stop_script.py', ['--name', name], '⏹ 停止脚本');
 }
 
-// ========== 通用工具调用 ==========
+// ========== 通用工具调用（已增加 REDIRECT 检测） ==========
 function doRunTool(script, args, label) {
     var modal = document.getElementById('toolModal');
     document.getElementById('keepOpenCheck').checked = false;
@@ -525,6 +558,17 @@ function doRunTool(script, args, label) {
     .then(r => r.json())
     .then(d => {
         var output = d.output || '执行完成';
+        // ---- 新增 REDIRECT 检测 ----
+        var redirectMatch = output.match(/^REDIRECT:\s*(http[^\s]+)/i);
+        if (redirectMatch) {
+            var url = redirectMatch[1];
+            window.open(url, '_blank');
+            document.getElementById('toolTitle').textContent = '🔗 已打开: ' + url;
+            document.getElementById('toolOutput').textContent = '已在新标签页打开：' + url;
+            setTimeout(function() { closeModal('toolModal'); }, 2000);
+            return;
+        }
+        // ------------------------------
         var isError = output.indexOf('❌') !== -1 || 
                       output.indexOf('错误') !== -1 || 
                       output.indexOf('失败') !== -1 ||
@@ -632,12 +676,19 @@ function loadButtons() {
         .catch(e => console.log('加载按钮失败:', e));
 }
 
+// ========== 执行动作（已增加重启确认） ==========
 function executeAction(action, label) {
     if (action.startsWith('runScript:')) {
         var script = action.split(':')[1];
         runScript(script);
     } else if (action.startsWith('runTool:')) {
         var script = action.split(':')[1];
+        // 针对重启脚本增加一次确认
+        if (script === 'btn_reboot.py') {
+            if (!confirm('确定要重启路由器吗？')) {
+                return;
+            }
+        }
         doRunTool(script, [], label || script);
     } else if (action.startsWith('func:')) {
         var funcName = action.split(':')[1];
