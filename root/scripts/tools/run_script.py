@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-beizhu = "▶ 运行指定脚本（包装脚本，用于显示输出）"
-"""
+beizhu = "▶ 运行指定脚本（包装脚本）"
+r"""
 ================================================================
-⚠️ 核心原则：轻量化是绝对核心 请勿删除或违反以下规则
+⚠️ 核心原则：轻量化是绝对核心 请勿删除或改变以下规则
 ================================================================
 
 【硬件环境】
   路由可用内存仅≈30M，精简python3，峰值内存控制最小化
-  自动适配 Windows/Linux/OpenWrt 平台
+  自动适配 Windows/Linux/OpenWrt
 
 【核心原则】
-  1. 日志规则遵循程序设定 不强制写日志
-  2. 脚本本身输出日志才写日志到文件 无日志输出不写日志到文件 降低闪存读写
-  3. 严禁将任何附属功能的代码合并到主面板 app.py 中
-  4. 主面板 app.py 只负责：路由 + 调用独立脚本 + 显示结果
+  1. 日志规则：不强制写日志
+  2. 脚本输出非空才写日志，空输出不写闪存
+  3. 禁止把业务代码写进app.py主程序
+  4. app.py只做路由，调用独立脚本
   5. 脚本存放：根脚本目录 /root/scripts，工具脚本放在子目录 /root/scripts/tools/
      Windows 测试环境根 D:\tmp\scripts，工具脚本 D:\tmp\scripts\tools
-  6. 所有弹窗 HTML 动态加载，不写死在主面板中
+  6. 弹窗HTML全部动态加载，不写死在主程序
 
 【备注】
   使用capture_output缓存全部子进程输出；若脚本输出超大，存在内存压力。
@@ -44,7 +44,7 @@ def safe_get_stdio_wrapper():
             pass
 
 
-# ========== 平台兼容路径配置（与主面板保持一致） ==========
+# ========== 平台兼容路径配置 ==========
 if os.name == 'nt':
     SCRIPTS_DIR = r"D:\tmp\scripts"
     LOGS_DIR = r"D:\tmp\scripts\logs"
@@ -68,7 +68,7 @@ def safe_write_log(log_path: str, content: str):
         with open(log_path, 'w', encoding='utf-8') as f:
             f.write(log_text)
     except (OSError, IOError):
-        # 磁盘满/权限不足，静默跳过写日志，不中断主流程
+        # 磁盘满/权限不足，静默跳过写日志，不中断业务
         pass
 
 
@@ -87,7 +87,7 @@ def main():
 
     script_path = os.path.join(SCRIPTS_DIR, arg_name)
 
-    # 【调整顺序】先判断文件是否存在，不存在直接退出，避免对不存在文件做realpath
+    # 先判断文件是否存在，不存在直接退出，避免对不存在文件做realpath
     if not os.path.exists(script_path):
         print(f"❌ 脚本不存在: {script_path}")
         sys.exit(1)
