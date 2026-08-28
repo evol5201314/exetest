@@ -115,6 +115,11 @@ def main():
             env=env
         )
         output = (result.stdout or '') + (result.stderr or '')
+
+        # 屏幕输出打印时间，只输出终端，**不加入output变量，不会重复写入日志**
+        screen_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(f"=== {screen_time} ===\n")
+
         if result.returncode != 0:
             print(f"⚠️ 脚本退出码: {result.returncode}")
         print(output)
@@ -129,12 +134,17 @@ def main():
         if e.stderr:
             partial_out += str(e.stderr)
         msg = "⏱ 执行超时（300秒）\n" + partial_out
+        # 超时场景同样输出屏幕时间
+        screen_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(f"=== {screen_time} ===\n")
         print(msg)
         safe_write_log(log_path, msg)
         sys.exit(1)
 
     except Exception as e:
         msg = f"❌ 执行异常: {repr(e)}"
+        screen_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(f"=== {screen_time} ===\n")
         print(msg)
         safe_write_log(log_path, msg)
         sys.exit(1)
