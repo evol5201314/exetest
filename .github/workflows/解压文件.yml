@@ -8,21 +8,23 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 解压 tmp.zip 到根目录（生成单个 tmp 文件夹）
+      - name: 解压 tmp.zip（解决中文文件名乱码）
         run: |
           set -eux
-          # 如果有旧的 tmp 目录，先删除（避免冲突）
+          # 清理旧的 tmp 目录，避免冲突
           rm -rf tmp
-          # 解压到当前目录，zip 内部的 tmp/ 会出现在根目录
-          unzip -o tmp.zip -d .
-          # 删除原 zip 文件（强制删除，避免静默失败）
+          # 安装 7-Zip 工具
+          sudo apt-get update && sudo apt-get install -y p7zip-full
+          # 强制以 GBK 编码解压，匹配 Windows 打包的 zip
+          7z x -scsGBK tmp.zip -o.
+          # 删除原 zip 文件
           rm -f tmp.zip
 
       - name: 提交并推送
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # 暂存所有变更：新增的 tmp 目录 + 删除的 tmp.zip 文件
+          # 暂存所有变更：新增的 tmp 目录 + 删除的 tmp.zip
           git add -A
           # 无变更则跳过提交，有变更则提交
           git diff --staged --quiet || git commit -m "解压 tmp.zip 到 tmp 目录并移除原压缩包"
