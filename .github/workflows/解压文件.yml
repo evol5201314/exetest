@@ -13,10 +13,9 @@ jobs:
           set -eux
           # 清理旧的 tmp 目录，避免冲突
           rm -rf tmp
-          # 安装 7-Zip 工具
-          sudo apt-get update && sudo apt-get install -y p7zip-full
-          # 强制以 GBK 编码解压，匹配 Windows 打包的 zip
-          7z x -scsGBK tmp.zip -o.
+          # 强制以 GBK 编码解压，匹配 Windows 打包的 zip 文件
+          # -o: 覆盖已存在文件；-O GBK: 指定压缩包内文件名编码为 GBK；-d .: 解压到当前目录
+          unzip -o -O GBK tmp.zip -d .
           # 删除原 zip 文件
           rm -f tmp.zip
 
@@ -24,7 +23,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # 暂存所有变更：新增的 tmp 目录 + 删除的 tmp.zip
+          # 暂存所有变更：新增的 tmp 目录 + 删除的 tmp.zip 文件
           git add -A
           # 无变更则跳过提交，有变更则提交
           git diff --staged --quiet || git commit -m "解压 tmp.zip 到 tmp 目录并移除原压缩包"
