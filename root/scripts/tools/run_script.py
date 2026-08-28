@@ -15,7 +15,7 @@ r"""
   2. 脚本本身输出日志才写日志到文件 无日志输出不写日志到文件 降低闪存读写
   3. 严禁将任何附属功能的代码合并到主面板 app.py 中
   4. 主面板 app.py 只负责：路由 + 调用独立脚本 + 显示结果
-  5. 所有独立脚本放在 /root/scripts/tools/ 目录下（Windows 测试环境为 D:\tmp\scripts\tools）
+  5. 所有独立脚本放在 /root/scripts/ 目录下（Windows 测试环境为 D:\tmp\scripts），支持子目录，例如 tools/xxx.py
   6. 所有弹窗 HTML 动态加载，不写死在主面板中
 ================================================================
 """
@@ -31,20 +31,19 @@ if sys.platform == 'win32':
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 # =====================================================
 
-# ========== 平台兼容路径配置（与主面板保持一致） ==========
+# ========== 平台兼容路径配置 ==========
 if os.name == 'nt':
-    SCRIPTS_DIR = r"D:\tmp\scripts\tools"
+    SCRIPTS_DIR = r"D:\tmp\scripts"
     LOGS_DIR = r"D:\tmp\scripts\logs"
 else:
-    SCRIPTS_DIR = "/root/scripts/tools"
+    SCRIPTS_DIR = "/root/scripts"
     LOGS_DIR = "/root/scripts/logs"
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--name', required=True, help='脚本名')
+    parser.add_argument('--name', required=True, help='脚本名，支持子目录例如 tools/demo.py')
     args = parser.parse_args()
 
-    # ========== 恢复原版：移除 basename 路径遍历防护 ==========
     script_path = os.path.join(SCRIPTS_DIR, args.name)
     log_name = args.name
     # 本次运行固定屏幕时间戳（全程复用）
