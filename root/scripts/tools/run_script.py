@@ -63,26 +63,24 @@ def main():
     try:
         # ---------- 关键修复：强制子进程也使用 UTF-8 ----------
         env = os.environ.copy()
-        env['PYTHONIOENCODING'] = 'utf-8'   # 让子进程的 print 也输出 UTF-8
+        env['PYTHONIOENCODING'] = 'utf-8'
 
         result = subprocess.run(
             [sys.executable, script_path],
             capture_output=True,
             text=True,
-            encoding='utf-8',        # 解码子进程输出为 UTF-8
+            encoding='utf-8',
             timeout=300,
-            env=env                  # 传递环境变量
+            env=env
         )
         # ------------------------------------------------
         output = (result.stdout or '') + (result.stderr or '')
         if result.returncode != 0:
             print(f"[{screen_ts}] ⚠️ 脚本退出码: {result.returncode}")
 
-        # 仅存在输出内容才打印分隔标记，避免空块
+        # 直接输出脚本原始内容，移除开始/结束标记
         if output.strip():
-            print(f"[{screen_ts}] ----脚本输出开始----")
             print(output)
-            print(f"[{screen_ts}] ----脚本输出结束----")
 
         # ---------- 遵守核心原则：有输出时才写日志文件 ----------
         if output.strip():
@@ -104,9 +102,7 @@ def main():
         full_display = partial_out + msg
 
         if partial_out.strip():
-            print(f"[{screen_ts}] ----脚本输出开始----")
             print(full_display)
-            print(f"[{screen_ts}] ----脚本输出结束----")
         else:
             print(f"[{screen_ts}] {msg}")
 
