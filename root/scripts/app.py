@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-beizhu = "📈 面板核心（路由器Bottle 轻量化版本）"
+beizhu = "📈 面板核心（跨平台统一版本）"
 Yingcang = True
 """
 ================================================================
@@ -9,6 +9,7 @@ Yingcang = True
 
 【硬件环境】
   路由可用内存仅≈30M，精简python3，峰值内存控制最小化
+  自动适配 Windows/Linux/OpenWrt 平台
 
 【核心原则】
   1. 面板本身只保留：脚本列表展示 + 内存/缓存显示
@@ -16,7 +17,7 @@ Yingcang = True
      必须通过「独立脚本」实现，点击时临时启动，执行完毕立即释放内存
   3. 严禁将任何附属功能的代码合并到主面板 app.py 中
   4. 主面板 app.py 只负责：路由 + 调用独立脚本 + 显示结果
-  5. 所有独立脚本放在 /root/scripts/tools/ 目录下
+  5. 所有独立脚本放在 /root/scripts/tools/ 目录下（Windows 测试环境为 D:\tmp\scripts\tools）
   6. 所有弹窗 HTML 动态加载，不写死在主面板中
   7. 脚本隐藏：在脚本前20行内添加 Yingcang = true，该脚本将不出现在脚本清单中（仅检测前20行，节约性能）
 
@@ -72,14 +73,20 @@ from bottle import Bottle, route, run, request, response, static_file
 
 app = Bottle()
 
-SCRIPTS_DIR = "/root/scripts"
-TOOLS_DIR = "/root/scripts/tools"
-STATUS_FILE = "/tmp/script_status.json"
+# ========== 平台兼容路径配置 ==========
+if os.name == 'nt':
+    SCRIPTS_DIR = r"D:\tmp\scripts"
+    TOOLS_DIR = r"D:\tmp\scripts\tools"
+    STATUS_FILE = r"D:\tmp\script_status.json"
+else:
+    SCRIPTS_DIR = "/root/scripts"
+    TOOLS_DIR = "/root/scripts/tools"
+    STATUS_FILE = "/tmp/script_status.json"
 
 def init_files():
     os.makedirs(SCRIPTS_DIR, exist_ok=True)
     os.makedirs(TOOLS_DIR, exist_ok=True)
-    os.makedirs("/root/scripts/static", exist_ok=True)
+    os.makedirs(os.path.join(SCRIPTS_DIR, "static"), exist_ok=True)
     if not os.path.exists(STATUS_FILE):
         with open(STATUS_FILE, 'w') as f:
             json.dump({}, f)
@@ -109,15 +116,15 @@ def extract_Yingcang(fp):
                 if i >= 20: break
                 if line.strip().startswith('Yingcang ='):
                     v = line.split('=', 1)[1].strip()
-                    # 去除可能的引号
                     if v.startswith('"') and v.endswith('"'): v = v[1:-1]
                     if v.startswith("'") and v.endswith("'"): v = v[1:-1]
                     return v.lower() == 'true'
     except: pass
     return False
-# ==========================================
 
 def get_meminfo():
+    if os.name == 'nt':
+        return {'total_kb':0, 'used_kb':0, 'available_kb':0, 'percent':0}
     try:
         with open('/proc/meminfo', 'r') as f: lines = f.readlines()
         mem = {}
@@ -130,6 +137,7 @@ def get_meminfo():
     except: return {'total_kb':0, 'used_kb':0, 'available_kb':0, 'percent':0}
 
 def get_apk_cache_size():
+    if os.name == 'nt': return 0
     cache_dir = "/var/cache/apk/"
     if not os.path.exists(cache_dir): return 0
     total = 0
@@ -148,7 +156,6 @@ def get_scripts():
     for fn in sorted(os.listdir(SCRIPTS_DIR)):
         full_path = os.path.join(SCRIPTS_DIR, fn)
         if fn.endswith('.py') and os.path.isfile(full_path):
-            # 检查隐藏标记，若为 true 则跳过
             if extract_Yingcang(full_path):
                 continue
             st = os.stat(full_path)
@@ -163,6 +170,8 @@ def get_scripts():
 
 def kill_process_on_port(port=5000):
     try:
+        if os.name == 'nt':
+            return True
         for cmd in [f"netstat -tulpn 2>/dev/null | grep ':{port} ' | awk '{{print $7}}' | cut -d'/' -f1",
                     f"lsof -t -i:{port} 2>/dev/null"]:
             pids = subprocess.run(cmd, shell=True, capture_output=True, text=True).stdout.strip().split()
@@ -174,17 +183,10 @@ def kill_process_on_port(port=5000):
     except: pass
     return True
 
-def get_router_ip():
-    try:
-        ip = subprocess.run(["uci", "get", "network.lan.ipaddr"], capture_output=True, text=True, timeout=2).stdout.strip()
-        if ip and '/' in ip: ip = ip.split('/')[0]
-        return ip or "192.168.1.1"
-    except: return "192.168.1.1"
-
 # ========== 静态文件路由 ==========
 @route('/static/<filename:path>')
 def serve_static(filename):
-    return static_file(filename, root="/root/scripts/static")
+    return static_file(filename, root=os.path.join(SCRIPTS_DIR, "static"))
 
 # ========== API 路由 ==========
 @route('/')
@@ -205,11 +207,6 @@ def api_meminfo():
 def api_apk_cache_size():
     response.content_type = 'application/json'
     return json.dumps({'size_mb': get_apk_cache_size()})
-
-@route('/api/router_ip')
-def api_router_ip():
-    response.content_type = 'application/json'
-    return json.dumps({'ip': get_router_ip()})
 
 # ========== 检查脚本是否为弹窗脚本（扫描前10行） ==========
 @route('/api/check_popup/<name>')
@@ -273,8 +270,8 @@ def stop_script(name):
         script_path = os.path.join(TOOLS_DIR, 'stop_script.py')
         if not os.path.exists(script_path):
             response.status = 500; return json.dumps({'error':'stop_script.py 不存在'})
-        result = subprocess.run(['python3', script_path, '--name', name], capture_output=True, text=True, timeout=30)
-        output = result.stdout + result.stderr
+        result = subprocess.run([sys.executable, script_path, '--name', name], capture_output=True, text=True, encoding='utf-8', timeout=30)
+        output = (result.stdout or '') + (result.stderr or '')
         response.content_type = 'application/json'
         return json.dumps({'message': output.strip() or '执行完成'})
     except Exception as e:
@@ -303,7 +300,6 @@ def run_tool():
         response.status = 400; return json.dumps({'error':'不安全的脚本名'})
     if script == 'kill_top_process.py' and '--exclude' not in str(args):
         args = ['--exclude', str(os.getpid())] + args
-    # 优先从 tools/ 查找，找不到再去 scripts/ 查找
     script_path = os.path.join(TOOLS_DIR, script)
     if not os.path.exists(script_path):
         script_path = os.path.join(SCRIPTS_DIR, script)
@@ -311,9 +307,9 @@ def run_tool():
             response.status = 404
             return json.dumps({'error': f'工具脚本 {script} 不存在'})
     try:
-        cmd = ['python3', script_path] + [str(a) for a in args]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        output = result.stdout + result.stderr
+        cmd = [sys.executable, script_path] + [str(a) for a in args]
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', timeout=300)
+        output = (result.stdout or '') + (result.stderr or '')
         if not output.strip(): output = '✅ 执行完成（无输出）'
         response.content_type = 'application/json'
         return json.dumps({'output': output})
@@ -424,7 +420,7 @@ select{appearance:auto;background:#fff}
 </style></head>
 <body>
 <div class="container">
-<div class="header"><h1>🐍 脚本面板</h1><div class="sub">📁 /root/scripts &nbsp;|&nbsp; ⏱ 自动刷新 10s</div></div>
+<div class="header"><h1>🐍 脚本面板</h1><div class="sub">📁 跨平台自适应 &nbsp;|&nbsp; ⏱ 自动刷新 10s</div></div>
 <div class="stats" id="stats">
 <div class="stat-card"><div class="num" id="total">0</div><div class="label">📄 总数</div></div>
 <div class="stat-card"><div class="num" id="running">0</div><div class="label">🔄 运行中</div></div>
@@ -457,18 +453,13 @@ select{appearance:auto;background:#fff}
 </div></div>
 
 <script>
-var routerIP = '';
 var modalLoaded = false;
-var currentLoadedHtml = 'modal_content.html';   // 记录当前加载的弹窗文件
+var currentLoadedHtml = 'modal_content.html';
 
 function st(s){var map={idle:'待执行',running:'运行中',success:'成功',failed:'失败',timeout:'超时',error:'错误',stopped:'已停止'};return map[s]||s}
 function badge(s){return'<span class="badge '+s+'">'+st(s)+'</span>'}
 function openModal(id){document.getElementById(id).classList.add('active')}
 function closeModal(id){document.getElementById(id).classList.remove('active')}
-
-function fetchRouterIP(){
-    fetch('/api/router_ip').then(r=>r.json()).then(d=>{routerIP=d.ip||window.location.hostname||'192.168.1.1'}).catch(()=>{routerIP=window.location.hostname||'192.168.1.1'})
-}
 
 function loadMem(){
     fetch('/api/meminfo').then(r=>r.json()).then(d=>{
@@ -527,7 +518,7 @@ function runScript(name) {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.popup) {
-                loadModal(data.popup, data.html);   // 传入 html 参数（如果脚本指定了 # html）
+                loadModal(data.popup, data.html);
                 return;
             }
             doRunTool('run_script.py', ['--name', name], '▶ 运行 ' + name);
@@ -543,10 +534,10 @@ function stopScript(name) {
     doRunTool('stop_script.py', ['--name', name], '⏹ 停止脚本');
 }
 
-// ========== 通用工具调用（已增加 REDIRECT 检测） ==========
+// ========== 通用工具调用（已增加 REDIRECT 检测，keepOpenCheck 已修复） ==========
 function doRunTool(script, args, label) {
     var modal = document.getElementById('toolModal');
-    document.getElementById('keepOpenCheck').checked = false;
+    // 不再重置复选框，保留用户的选择
     document.getElementById('toolTitle').textContent = '⏳ ' + label + ' ...';
     document.getElementById('toolOutput').textContent = '执行中...';
     openModal('toolModal');
@@ -558,7 +549,7 @@ function doRunTool(script, args, label) {
     .then(r => r.json())
     .then(d => {
         var output = d.output || '执行完成';
-        // ---- 新增 REDIRECT 检测 ----
+        // ---- 检测 REDIRECT: 指令 ----
         var redirectMatch = output.match(/^REDIRECT:\s*(http[^\s]+)/i);
         if (redirectMatch) {
             var url = redirectMatch[1];
@@ -595,9 +586,8 @@ function doRunTool(script, args, label) {
 // ========== 通用弹窗加载器（支持自定义 HTML 文件） ==========
 function loadModal(name, htmlFile) {
     var container = document.getElementById('modalContainer');
-    var targetHtml = htmlFile || 'modal_content.html';   // 如果没有指定，默认加载主弹窗文件
+    var targetHtml = htmlFile || 'modal_content.html';
 
-    // 如果请求的文件与当前已加载的不同，则强制重新加载
     if (currentLoadedHtml !== targetHtml) {
         modalLoaded = false;
         container.innerHTML = '';
@@ -628,7 +618,7 @@ function loadModal(name, htmlFile) {
             });
             container.innerHTML = html;
             modalLoaded = true;
-            currentLoadedHtml = targetHtml;   // 记录当前加载的文件名
+            currentLoadedHtml = targetHtml;
             if (scriptCode) {
                 try { eval(scriptCode); } catch(e) { console.log('弹窗 JS 执行失败:', e); }
             }
@@ -683,7 +673,6 @@ function executeAction(action, label) {
         runScript(script);
     } else if (action.startsWith('runTool:')) {
         var script = action.split(':')[1];
-        // 针对重启脚本增加一次确认
         if (script === 'btn_reboot.py') {
             if (!confirm('确定要重启路由器吗？')) {
                 return;
@@ -698,15 +687,9 @@ function executeAction(action, label) {
     }
 }
 
-// ========== 跳转 ==========
-function goLuci() { window.open('http://' + (routerIP || '192.168.1.1') + '/cgi-bin/luci', '_blank'); }
-function go9090() { window.open('http://' + (routerIP || '192.168.1.1') + ':9090/ui', '_blank'); }
-function rebootRouter() { if (!confirm('重启路由器？')) return; if (!confirm('再次确认？')) return; alert('正在重启...'); fetch('/api/restart_router', { method: 'POST' }); }
-
 document.getElementById('refreshBtn').onclick = loadAll;
 document.getElementById('toolModal').onclick = function(e) { if (e.target === this) closeModal('toolModal'); };
 
-fetchRouterIP();
 loadAll();
 loadButtons();
 setInterval(loadAll, 10000);
