@@ -1,4 +1,4 @@
-yingcang = True
+Yingcang = True
 PUSH_ENABLE = True
 VERBOSE_LOG = False
 PUSH_TOKEN = "cdc7db6c36da46c1b877543016be3cba"
