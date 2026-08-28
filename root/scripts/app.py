@@ -420,7 +420,7 @@ select{appearance:auto;background:#fff}
 </style></head>
 <body>
 <div class="container">
-<div class="header"><h1>🐍 脚本面板</h1><div class="sub">📁 跨平台自适应 &nbsp;|&nbsp; ⏱ 自动刷新 10s</div></div>
+<div class="header"><h1>🐍 脚本面板</h1><div class="sub">📁 跨平台自适应 &nbsp;|&nbsp; 路由/root/scripts &nbsp;|&nbsp; 电脑/tmp/scripts  &nbsp;|&nbsp; ⏱ 自动刷新 10s</div></div>
 <div class="stats" id="stats">
 <div class="stat-card"><div class="num" id="total">0</div><div class="label">📄 总数</div></div>
 <div class="stat-card"><div class="num" id="running">0</div><div class="label">🔄 运行中</div></div>
