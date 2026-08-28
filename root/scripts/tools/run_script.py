@@ -44,14 +44,14 @@ def main():
     parser.add_argument('--name', required=True, help='脚本名')
     args = parser.parse_args()
 
-    # 防御路径穿越，只取文件名
-    safe_name = os.path.basename(args.name)
-    script_path = os.path.join(SCRIPTS_DIR, safe_name)
+    # ========== 恢复原版：移除 basename 路径遍历防护 ==========
+    script_path = os.path.join(SCRIPTS_DIR, args.name)
+    log_name = args.name
     # 本次运行固定屏幕时间戳（全程复用）
     screen_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     if not os.path.exists(script_path):
-        print(f"[{screen_ts}] ❌ 脚本 {safe_name} 不存在")
+        print(f"[{screen_ts}] ❌ 脚本 {args.name} 不存在")
         sys.exit(1)
 
     # 确保日志目录存在，IO异常不崩溃
@@ -59,7 +59,7 @@ def main():
         os.makedirs(LOGS_DIR, exist_ok=True)
     except Exception:
         pass
-    log_path = os.path.join(LOGS_DIR, f"{safe_name}.log")
+    log_path = os.path.join(LOGS_DIR, f"{log_name}.log")
 
     try:
         # ---------- 关键修复：强制子进程也使用 UTF-8 ----------
