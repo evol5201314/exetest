@@ -289,7 +289,7 @@ if __name__ == "__main__":
             if not token:
                 token = "cdc7db6c36da46c1b877543016be3cba"
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                f.write('yingcang = True\n')
+                f.write('Yingcang = True\n')
                 f.write(f'PUSH_ENABLE = {push_enable_flag}\n')
                 f.write(f'VERBOSE_LOG = {verbose_flag}\n')
                 f.write(f'PUSH_TOKEN = "{token}"\n')
