@@ -76,160 +76,187 @@ def load_config():
 PUSH_ENABLE, VERBOSE_LOG, PUSH_TOKEN, STOCK_CONFIG, US_CONFIG, CRYPTO_CONFIG = load_config()
 def resolve_tencent_code(raw_code):
     return raw_code.strip()
-def get_kline_prev_two_close(tencent_code):
-    yc = 0.0
-    pc = 0.0
-    if tencent_code.startswith("hf"):
-        return (yc, pc)
+
+# ========== A股数据获取（腾讯） ==========
+def get_a_stock_recent_three_days(code):
+    """
+    获取A股最近三天数据：今日（当前价、最高、最低），昨日（收、高、低），前日（收、高、低）
+    返回字典，若无数据则对应值为0.0
+    """
+    tencent_code = resolve_tencent_code(code)
+    result = {
+        "today": {"current": 0.0, "high": 0.0, "low": 0.0},
+        "yesterday": {"close": 0.0, "high": 0.0, "low": 0.0},
+        "prev_day": {"close": 0.0, "high": 0.0, "low": 0.0},
+    }
+    # 1. 实时接口：获取当前价、昨收、今日最高、今日最低
     try:
-        url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={tencent_code},day,,,30,"
+        r = requests.get(f"http://qt.gtimg.cn/q={tencent_code}", headers=TENCENT_HEADERS, timeout=8)
+        text = r.text.replace("\x00","").strip()
+        if '="' in text:
+            body = text.split('="')[1].split('"')[0]
+            arr = body.split("~")
+            if len(arr) >= 35:
+                # 索引3：当前价；索引33：今日最高；索引34：今日最低；索引4：昨收
+                result["today"]["current"] = float(arr[3]) if arr[3] else 0.0
+                result["today"]["high"] = float(arr[33]) if arr[33] else 0.0
+                result["today"]["low"] = float(arr[34]) if arr[34] else 0.0
+                result["yesterday"]["close"] = float(arr[4]) if arr[4] else 0.0
+    except Exception:
+        pass
+
+    # 2. K线接口：获取最近3根日K，取倒数第二、第三根作为昨日和前日
+    try:
+        url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={tencent_code},day,,,5,"
         r = requests.get(url, headers=TENCENT_HEADERS, timeout=8)
         j = r.json()
         stock_node = j.get("data", {}).get(tencent_code, {})
         day_list = stock_node.get("day", [])
         if len(day_list) >= 2:
-            yc = float(day_list[-2][4])
-        if len(day_list) >= 3:
-            pc = float(day_list[-3][4])
+            # 腾讯K线数组结构：[日期, 开盘, 收盘, 最高, 最低, 成交量, ...]
+            # 昨日
+            if len(day_list) >= 2:
+                y_close = float(day_list[-2][2])
+                y_high = float(day_list[-2][3])
+                y_low = float(day_list[-2][4])
+                if y_close > 0:
+                    result["yesterday"]["close"] = y_close
+                result["yesterday"]["high"] = y_high
+                result["yesterday"]["low"] = y_low
+            # 前日
+            if len(day_list) >= 3:
+                p_close = float(day_list[-3][2])
+                p_high = float(day_list[-3][3])
+                p_low = float(day_list[-3][4])
+                result["prev_day"]["close"] = p_close
+                result["prev_day"]["high"] = p_high
+                result["prev_day"]["low"] = p_low
     except Exception:
         pass
-    return (yc, pc)
-def fetch_a_stock_price(code):
-    tencent_code = resolve_tencent_code(code)
-    try:
-        r = requests.get(f"http://qt.gtimg.cn/q={tencent_code}", headers=TENCENT_HEADERS, timeout=8)
-        text = r.text.replace("\x00","").strip()
-        if '="' in text:
-            body = text.split('="')[1].split('"')[0]
-            arr = body.split("~")
-            if len(arr)>=4 and arr[3]:
-                return str(float(arr[3]))
-    except Exception:
-        pass
-    return "查无"
-def get_a_stock_detail(code):
-    tencent_code = resolve_tencent_code(code)
-    name = code
-    current = 0.0
-    yesterday = 0.0
-    prev_close = 0.0
-    try:
-        r = requests.get(f"http://qt.gtimg.cn/q={tencent_code}", headers=TENCENT_HEADERS, timeout=8)
-        text = r.text.replace("\x00","").strip()
-        if '="' in text:
-            body = text.split('="')[1].split('"')[0]
-            arr = body.split("~")
-            name = arr[1] if len(arr)>1 else code
-            current = float(arr[3]) if (len(arr)>3 and arr[3]) else 0.0
-            yesterday = float(arr[4]) if (len(arr)>4 and arr[4]) else 0.0
-    except Exception:
-        pass
-    kl_yc, kl_pc = get_kline_prev_two_close(tencent_code)
-    if kl_yc > 1e-6:
-        yesterday = kl_yc
-    if kl_pc > 1e-6:
-        prev_close = kl_pc
-    today_pct = ((current - yesterday) / yesterday * 100) if yesterday else 0.0
-    yesterday_pct = ((yesterday - prev_close) / prev_close * 100) if prev_close > 1e-6 else None
-    return {
-        "code": code,
-        "name": name,
-        "current": current,
-        "yesterday": yesterday,
-        "prev_close": prev_close,
-        "today_pct": today_pct,
-        "yesterday_pct": yesterday_pct
+
+    return result
+
+# ========== 美股数据获取（雅虎财经） ==========
+def get_us_stock_recent_three_days(yahoo_code):
+    """
+    获取美股最近三天数据：今日（当前价、最高、最低），昨日（收、高、低），前日（收、高、低）
+    返回字典，若无数据则对应值为0.0
+    """
+    result = {
+        "today": {"current": 0.0, "high": 0.0, "low": 0.0},
+        "yesterday": {"close": 0.0, "high": 0.0, "low": 0.0},
+        "prev_day": {"close": 0.0, "high": 0.0, "low": 0.0},
     }
-def fetch_us_price(yahoo_code):
-    try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_code}?range=5d&interval=1d"
-        r = requests.get(url, headers=YAHOO_HEADERS, timeout=6)
-        j = r.json()
-        meta = j["chart"]["result"][0]["meta"]
-        price = meta.get("regularMarketPrice")
-        if price is not None:
-            return str(float(price))
-    except Exception:
-        pass
-    return "查无"
-def get_us_stock_detail(yahoo_code):
-    name = yahoo_code
-    current = 0.0
-    yesterday = 0.0
-    prev_close = 0.0
-    today_pct = 0.0
-    yesterday_pct = None
     try:
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_code}?range=5d&interval=1d"
         r = requests.get(url, headers=YAHOO_HEADERS, timeout=6)
         j = r.json()
         res = j["chart"]["result"][0]
         meta = res["meta"]
-        closes = res["indicators"]["quote"][0]["close"]
-        yahoo_name = meta.get("shortName", yahoo_code)
-        name = yahoo_name
-        current = meta["regularMarketPrice"]
-        valid_closes = [c for c in closes if c is not None]
-        if len(valid_closes)>=2:
-            yesterday = valid_closes[-2]
-        if len(valid_closes)>=3:
-            prev_close = valid_closes[-3]
-        if yesterday > 1e-6:
-            today_pct = ((current - yesterday)/yesterday)*100
-        if prev_close >1e-6:
-            yesterday_pct = ((yesterday - prev_close)/prev_close)*100
+        quote = res["indicators"]["quote"][0]
+
+        # 今日数据来自meta
+        result["today"]["current"] = float(meta["regularMarketPrice"])
+        result["today"]["high"] = float(meta["regularMarketDayHigh"])
+        result["today"]["low"] = float(meta["regularMarketDayLow"])
+
+        # 历史K线数组：close, high, low
+        closes = quote["close"]
+        highs = quote["high"]
+        lows = quote["low"]
+
+        # 昨日（倒数第二根）
+        if len(closes) >= 2:
+            result["yesterday"]["close"] = float(closes[-2]) if closes[-2] is not None else 0.0
+            result["yesterday"]["high"] = float(highs[-2]) if highs[-2] is not None else 0.0
+            result["yesterday"]["low"] = float(lows[-2]) if lows[-2] is not None else 0.0
+        # 前日（倒数第三根）
+        if len(closes) >= 3:
+            result["prev_day"]["close"] = float(closes[-3]) if closes[-3] is not None else 0.0
+            result["prev_day"]["high"] = float(highs[-3]) if highs[-3] is not None else 0.0
+            result["prev_day"]["low"] = float(lows[-3]) if lows[-3] is not None else 0.0
     except Exception:
         pass
-    return {
-        "code": yahoo_code,
-        "name": name,
-        "current": current,
-        "yesterday": yesterday,
-        "prev_close": prev_close,
-        "today_pct": today_pct,
-        "yesterday_pct": yesterday_pct
+    return result
+
+# ========== 虚拟币数据获取（OKX） ==========
+def get_crypto_recent_three_days(code):
+    """
+    获取虚拟币最近三天数据：今日（当前价、最高、最低），昨日（收、高、低），前日（收、高、低）
+    使用OKX日K线接口，数据最新在前，limit=3
+    """
+    result = {
+        "today": {"current": 0.0, "high": 0.0, "low": 0.0},
+        "yesterday": {"close": 0.0, "high": 0.0, "low": 0.0},
+        "prev_day": {"close": 0.0, "high": 0.0, "low": 0.0},
     }
-
-# ========== 统一推送格式（美化版） ==========
-def format_entry(section_title, index, code, name, current, yesterday, prev_close,
-                 today_pct, yesterday_pct, extra=None):
-    """
-    生成单条记录的格式化推送文本
-    格式示例：
-    【A/港国内股】第1行
-      国内黄金 (sh518880)
-      当前: 9.47 | 昨日: 9.45 | 前日: 9.50
-      涨幅: +0.32% | 昨日涨幅: -0.56%
-    """
-    lines = []
-    # 标题行：带行号
-    lines.append(f"【{section_title}】第{index}行")
-    # 名称行：名称 + 代码
-    lines.append(f"  {name} ({code})")
-    # 价格行：三个价格
-    lines.append(f"  当前: {current:.2f} | 昨日: {yesterday:.2f} | 前日: {prev_close:.2f}")
-    # 涨幅行
-    yp_str = f"{yesterday_pct:.2f}%" if yesterday_pct is not None else "N/A"
-    pct_line = f"  涨幅: {today_pct:+.2f}% | 昨日涨幅: {yp_str}"
-    if extra and 'pct_24h' in extra:
-        pct_line += f" | 24h涨幅: {extra['pct_24h']:+.2f}%"
-    lines.append(pct_line)
-    return "\n".join(lines)
-# =====================================================
-
-def get_crypto_prev_close(code):
-    """获取虚拟币前日收盘价（T-2），接口参数修正为 bar=1D"""
     try:
-        # 修正：bar=1D（大写D）
         url = f"https://www.okx.com/api/v5/market/history-candles?instId={code}-USDT&bar=1D&limit=3"
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
         data = r.json().get('data', [])
-        # data 按时间倒序排列，[0]今日，[1]昨日，[2]前日
+        # data[0] 今日，data[1] 昨日，data[2] 前日
+        if len(data) >= 1:
+            # 今日K线：索引1开盘，2最高，3最低，4收盘（即最新价）
+            result["today"]["current"] = float(data[0][4])
+            result["today"]["high"] = float(data[0][2])
+            result["today"]["low"] = float(data[0][3])
+        if len(data) >= 2:
+            result["yesterday"]["close"] = float(data[1][4])
+            result["yesterday"]["high"] = float(data[1][2])
+            result["yesterday"]["low"] = float(data[1][3])
         if len(data) >= 3:
-            return float(data[2][4])  # 前日收盘价
-    except:
+            result["prev_day"]["close"] = float(data[2][4])
+            result["prev_day"]["high"] = float(data[2][2])
+            result["prev_day"]["low"] = float(data[2][3])
+    except Exception:
         pass
-    return 0.0
+    return result
+
+# ========== 计算涨幅 ==========
+def calc_pct(current, prev):
+    return ((current - prev) / prev * 100) if prev > 1e-6 else 0.0
+
+# ========== 统一推送格式（美化版） ==========
+def format_entry(section_title, index, code, name, data):
+    """
+    data: {
+        "today": {"current": float, "high": float, "low": float},
+        "yesterday": {"close": float, "high": float, "low": float},
+        "prev_day": {"close": float, "high": float, "low": float}
+    }
+    返回格式化字符串
+    """
+    # 计算涨幅
+    today_current = data["today"]["current"]
+    yesterday_close = data["yesterday"]["close"]
+    prev_day_close = data["prev_day"]["close"]
+    today_pct = calc_pct(today_current, yesterday_close) if yesterday_close > 0 else 0.0
+    yesterday_pct = calc_pct(yesterday_close, prev_day_close) if prev_day_close > 0 else None
+
+    lines = []
+    lines.append(f"【{section_title}】第{index}行")
+    lines.append(f"【{name}】 ({code})")
+    lines.append("=" * 30)
+    # 今日行
+    today_str = f"现{today_current:.2f}" if today_current else "现N/A"
+    today_high_str = f"{data['today']['high']:.2f}" if data['today']['high'] else "N/A"
+    today_low_str = f"{data['today']['low']:.2f}" if data['today']['low'] else "N/A"
+    lines.append(f"【今日】{today_str} | 高{today_high_str} | 低{today_low_str}")
+    # 昨日行
+    y_close_str = f"{data['yesterday']['close']:.2f}" if data['yesterday']['close'] else "N/A"
+    y_high_str = f"{data['yesterday']['high']:.2f}" if data['yesterday']['high'] else "N/A"
+    y_low_str = f"{data['yesterday']['low']:.2f}" if data['yesterday']['low'] else "N/A"
+    lines.append(f"【昨日】收{y_close_str} | 高{y_high_str} | 低{y_low_str}")
+    # 前日行
+    p_close_str = f"{data['prev_day']['close']:.2f}" if data['prev_day']['close'] else "N/A"
+    p_high_str = f"{data['prev_day']['high']:.2f}" if data['prev_day']['high'] else "N/A"
+    p_low_str = f"{data['prev_day']['low']:.2f}" if data['prev_day']['low'] else "N/A"
+    lines.append(f"【前日】收{p_close_str} | 高{p_high_str} | 低{p_low_str}")
+    # 涨幅行
+    yp_str = f"{yesterday_pct:+.2f}%" if yesterday_pct is not None else "N/A"
+    lines.append(f"【涨幅】今日{today_pct:+.2f}% | 昨日{yp_str}")
+    lines.append("=" * 30)
+    return "\n".join(lines)
 
 def build_full_report():
     entries = []
@@ -238,53 +265,25 @@ def build_full_report():
         code, remark, low, high = cfg[0], cfg[1], cfg[2], cfg[3]
         if not code:
             continue
-        detail = get_a_stock_detail(code)
-        name = remark.strip() if remark.strip() else detail["name"]
-        entries.append(format_entry(
-            "A/港国内股", idx, code, name,
-            detail["current"], detail["yesterday"], detail["prev_close"],
-            detail["today_pct"], detail["yesterday_pct"]
-        ))
+        data = get_a_stock_recent_three_days(code)
+        name = remark.strip() if remark.strip() else code  # 优先备注名
+        entries.append(format_entry("A/港国内股", idx, code, name, data))
     # 美股
     for idx, cfg in enumerate(US_CONFIG, 1):
         y_code, remark, low, high = cfg[0], cfg[1], cfg[2], cfg[3]
         if not y_code:
             continue
-        detail = get_us_stock_detail(y_code)
-        name = remark.strip() if remark.strip() else detail["name"]
-        entries.append(format_entry(
-            "美股指数", idx, y_code, name,
-            detail["current"], detail["yesterday"], detail["prev_close"],
-            detail["today_pct"], detail["yesterday_pct"]
-        ))
-    # 虚拟币（修正涨幅计算）
+        data = get_us_stock_recent_three_days(y_code)
+        name = remark.strip() if remark.strip() else y_code
+        entries.append(format_entry("美股指数", idx, y_code, name, data))
+    # 虚拟币
     for idx, cfg in enumerate(CRYPTO_CONFIG, 1):
         code, remark, low, high = cfg[0], cfg[1], cfg[2], cfg[3]
         if not code:
             continue
-        try:
-            r = requests.get(f"https://www.okx.com/api/v5/market/ticker?instId={code}-USDT", headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
-            d = r.json()
-            if "data" in d and d["data"]:
-                item = d["data"][0]
-                current = float(item.get("last", 0))
-                open_24h = float(item.get("open24h", 0))      # 昨日价格（24h前）
-                prev_close_crypto = get_crypto_prev_close(code)  # 前日价格
-                # 修正：今日涨幅 = (当前 - 昨日) / 昨日
-                today_pct = ((current - open_24h) / open_24h * 100) if open_24h else 0.0
-                # 修正：昨日涨幅 = (昨日 - 前日) / 前日
-                yesterday_pct = ((open_24h - prev_close_crypto) / prev_close_crypto * 100) if prev_close_crypto > 1e-6 else None
-                # 24h 涨幅与今日涨幅相同，但保留作为额外信息
-                pct_24h = today_pct
-                name = remark.strip() if remark.strip() else code
-                entries.append(format_entry(
-                    "虚拟币", idx, code, name,
-                    current, open_24h, prev_close_crypto,
-                    today_pct, yesterday_pct,
-                    extra={'pct_24h': pct_24h}
-                ))
-        except Exception:
-            pass
+        data = get_crypto_recent_three_days(code)
+        name = remark.strip() if remark.strip() else code
+        entries.append(format_entry("虚拟币", idx, code, name, data))
     return "\n\n".join(entries)
 
 if __name__ == "__main__":
@@ -328,23 +327,18 @@ if __name__ == "__main__":
         for cfg in STOCK_CONFIG:
             code = cfg[0]
             if code:
-                result["stocks"][code] = fetch_a_stock_price(code)
+                data = get_a_stock_recent_three_days(code)
+                result["stocks"][code] = data["today"]["current"]
         for cfg in US_CONFIG:
             y_code = cfg[0]
             if y_code:
-                result["us"][y_code] = fetch_us_price(y_code)
+                data = get_us_stock_recent_three_days(y_code)
+                result["us"][y_code] = data["today"]["current"]
         for cfg in CRYPTO_CONFIG:
             code = cfg[0]
             if code:
-                try:
-                    r = requests.get(f"https://www.okx.com/api/v5/market/ticker?instId={code}-USDT", headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
-                    d = r.json()
-                    if "data" in d and d["data"]:
-                        result["crypto"][code] = d["data"][0]["last"]
-                    else:
-                        result["crypto"][code] = "查无"
-                except Exception:
-                    result["crypto"][code] = "查无"
+                data = get_crypto_recent_three_days(code)
+                result["crypto"][code] = data["today"]["current"]
         print(json.dumps(result, ensure_ascii=False))
         sys.exit(0)
     # =========手动强制推送模式=========
@@ -365,73 +359,141 @@ if __name__ == "__main__":
             code, remark, low, high = cfg[0], cfg[1], cfg[2], cfg[3]
             if not code:
                 continue
-            detail = get_a_stock_detail(code)
-            name = remark.strip() if remark.strip() else detail["name"]
-            current = detail["current"]
-            yesterday = detail["yesterday"]
-            prev_close_val = detail["prev_close"]
-            today_pct = detail["today_pct"]
-            yesterday_pct = detail["yesterday_pct"]
-            if low and current <= float(low):
-                alerts.append(f"【股票】第{index}行 {code} {name} 现价 {current} 跌破报警线 {low}！")
-            if high and current >= float(high):
-                alerts.append(f"【股票】第{index}行 {code} {name} 现价 {current} 突破报警线 {high}！")
-            push_entries.append(format_entry(
-                "A/港国内股", index, code, name,
-                current, yesterday, prev_close_val,
-                today_pct, yesterday_pct
-            ))
+            data = get_a_stock_recent_three_days(code)
+            name = remark.strip() if remark.strip() else code
+            # 构建推送条目
+            push_entries.append(format_entry("A/港国内股", index, code, name, data))
+            # 报警判断
+            if low or high:
+                # 今日价格
+                today_current = data["today"]["current"]
+                today_high = data["today"]["high"]
+                today_low = data["today"]["low"]
+                # 昨日价格
+                y_close = data["yesterday"]["close"]
+                y_high = data["yesterday"]["high"]
+                y_low = data["yesterday"]["low"]
+                # 检查低报警线
+                if low:
+                    low_val = float(low)
+                    # 今日现价
+                    if today_current > 0 and today_current <= low_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 今日现价 {today_current:.2f} 跌破报警线 {low_val}！")
+                    # 今日最高
+                    if today_high > 0 and today_high <= low_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 今日最高价 {today_high:.2f} 跌破报警线 {low_val}！")
+                    # 今日最低
+                    if today_low > 0 and today_low <= low_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 今日最低价 {today_low:.2f} 跌破报警线 {low_val}！")
+                    # 昨日收盘
+                    if y_close > 0 and y_close <= low_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 昨日收盘价 {y_close:.2f} 跌破报警线 {low_val}！")
+                    # 昨日最高
+                    if y_high > 0 and y_high <= low_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 昨日最高价 {y_high:.2f} 跌破报警线 {low_val}！")
+                    # 昨日最低
+                    if y_low > 0 and y_low <= low_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 昨日最低价 {y_low:.2f} 跌破报警线 {low_val}！")
+                if high:
+                    high_val = float(high)
+                    if today_current > 0 and today_current >= high_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 今日现价 {today_current:.2f} 突破报警线 {high_val}！")
+                    if today_high > 0 and today_high >= high_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 今日最高价 {today_high:.2f} 突破报警线 {high_val}！")
+                    if today_low > 0 and today_low >= high_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 今日最低价 {today_low:.2f} 突破报警线 {high_val}！")
+                    if y_close > 0 and y_close >= high_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 昨日收盘价 {y_close:.2f} 突破报警线 {high_val}！")
+                    if y_high > 0 and y_high >= high_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 昨日最高价 {y_high:.2f} 突破报警线 {high_val}！")
+                    if y_low > 0 and y_low >= high_val:
+                        alerts.append(f"【股票】第{index}行 {code} {name} 昨日最低价 {y_low:.2f} 突破报警线 {high_val}！")
         # 美股
         for index, cfg in enumerate(US_CONFIG, 1):
             y_code, remark, low, high = cfg[0], cfg[1], cfg[2], cfg[3]
             if not y_code:
                 continue
-            detail = get_us_stock_detail(y_code)
-            name = remark.strip() if remark.strip() else detail["name"]
-            current = detail["current"]
-            yesterday = detail["yesterday"]
-            prev_close_val = detail["prev_close"]
-            today_pct = detail["today_pct"]
-            yesterday_pct = detail["yesterday_pct"]
-            if low and current <= float(low):
-                alerts.append(f"【美股】第{index}行 {y_code} {name} 现价 {current} 跌破报警线 {low}！")
-            if high and current >= float(high):
-                alerts.append(f"【美股】第{index}行 {y_code} {name} 现价 {current} 突破报警线 {high}！")
-            push_entries.append(format_entry(
-                "美股指数", index, y_code, name,
-                current, yesterday, prev_close_val,
-                today_pct, yesterday_pct
-            ))
-        # 虚拟币（修正涨幅计算）
+            data = get_us_stock_recent_three_days(y_code)
+            name = remark.strip() if remark.strip() else y_code
+            push_entries.append(format_entry("美股指数", index, y_code, name, data))
+            if low or high:
+                today_current = data["today"]["current"]
+                today_high = data["today"]["high"]
+                today_low = data["today"]["low"]
+                y_close = data["yesterday"]["close"]
+                y_high = data["yesterday"]["high"]
+                y_low = data["yesterday"]["low"]
+                if low:
+                    low_val = float(low)
+                    if today_current > 0 and today_current <= low_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 今日现价 {today_current:.2f} 跌破报警线 {low_val}！")
+                    if today_high > 0 and today_high <= low_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 今日最高价 {today_high:.2f} 跌破报警线 {low_val}！")
+                    if today_low > 0 and today_low <= low_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 今日最低价 {today_low:.2f} 跌破报警线 {low_val}！")
+                    if y_close > 0 and y_close <= low_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 昨日收盘价 {y_close:.2f} 跌破报警线 {low_val}！")
+                    if y_high > 0 and y_high <= low_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 昨日最高价 {y_high:.2f} 跌破报警线 {low_val}！")
+                    if y_low > 0 and y_low <= low_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 昨日最低价 {y_low:.2f} 跌破报警线 {low_val}！")
+                if high:
+                    high_val = float(high)
+                    if today_current > 0 and today_current >= high_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 今日现价 {today_current:.2f} 突破报警线 {high_val}！")
+                    if today_high > 0 and today_high >= high_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 今日最高价 {today_high:.2f} 突破报警线 {high_val}！")
+                    if today_low > 0 and today_low >= high_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 今日最低价 {today_low:.2f} 突破报警线 {high_val}！")
+                    if y_close > 0 and y_close >= high_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 昨日收盘价 {y_close:.2f} 突破报警线 {high_val}！")
+                    if y_high > 0 and y_high >= high_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 昨日最高价 {y_high:.2f} 突破报警线 {high_val}！")
+                    if y_low > 0 and y_low >= high_val:
+                        alerts.append(f"【美股】第{index}行 {y_code} {name} 昨日最低价 {y_low:.2f} 突破报警线 {high_val}！")
+        # 虚拟币
         for index, cfg in enumerate(CRYPTO_CONFIG, 1):
             code, remark, low, high = cfg[0], cfg[1], cfg[2], cfg[3]
             if not code:
                 continue
-            try:
-                r = requests.get(f"https://www.okx.com/api/v5/market/ticker?instId={code}-USDT", headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
-                d = r.json()
-                if "data" in d and d["data"]:
-                    item = d["data"][0]
-                    current = float(item.get("last", 0))
-                    open_24h = float(item.get("open24h", 0))      # 昨日价格
-                    prev_close_crypto = get_crypto_prev_close(code)  # 前日价格
-                    # 修正涨幅计算
-                    today_pct = ((current - open_24h) / open_24h * 100) if open_24h else 0.0
-                    yesterday_pct = ((open_24h - prev_close_crypto) / prev_close_crypto * 100) if prev_close_crypto > 1e-6 else None
-                    pct_24h = today_pct
-                    name = remark.strip() if remark.strip() else code
-                    if low and current <= float(low):
-                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 现价 {current} 跌破报警线 {low}！")
-                    if high and current >= float(high):
-                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 现价 {current} 突破报警线 {high}！")
-                    push_entries.append(format_entry(
-                        "虚拟币", index, code, name,
-                        current, open_24h, prev_close_crypto,
-                        today_pct, yesterday_pct,
-                        extra={'pct_24h': pct_24h}
-                    ))
-            except Exception:
-                pass
+            data = get_crypto_recent_three_days(code)
+            name = remark.strip() if remark.strip() else code
+            push_entries.append(format_entry("虚拟币", index, code, name, data))
+            if low or high:
+                today_current = data["today"]["current"]
+                today_high = data["today"]["high"]
+                today_low = data["today"]["low"]
+                y_close = data["yesterday"]["close"]
+                y_high = data["yesterday"]["high"]
+                y_low = data["yesterday"]["low"]
+                if low:
+                    low_val = float(low)
+                    if today_current > 0 and today_current <= low_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 今日现价 {today_current:.2f} 跌破报警线 {low_val}！")
+                    if today_high > 0 and today_high <= low_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 今日最高价 {today_high:.2f} 跌破报警线 {low_val}！")
+                    if today_low > 0 and today_low <= low_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 今日最低价 {today_low:.2f} 跌破报警线 {low_val}！")
+                    if y_close > 0 and y_close <= low_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 昨日收盘价 {y_close:.2f} 跌破报警线 {low_val}！")
+                    if y_high > 0 and y_high <= low_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 昨日最高价 {y_high:.2f} 跌破报警线 {low_val}！")
+                    if y_low > 0 and y_low <= low_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 昨日最低价 {y_low:.2f} 跌破报警线 {low_val}！")
+                if high:
+                    high_val = float(high)
+                    if today_current > 0 and today_current >= high_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 今日现价 {today_current:.2f} 突破报警线 {high_val}！")
+                    if today_high > 0 and today_high >= high_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 今日最高价 {today_high:.2f} 突破报警线 {high_val}！")
+                    if today_low > 0 and today_low >= high_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 今日最低价 {today_low:.2f} 突破报警线 {high_val}！")
+                    if y_close > 0 and y_close >= high_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 昨日收盘价 {y_close:.2f} 突破报警线 {high_val}！")
+                    if y_high > 0 and y_high >= high_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 昨日最高价 {y_high:.2f} 突破报警线 {high_val}！")
+                    if y_low > 0 and y_low >= high_val:
+                        alerts.append(f"【虚拟币】第{index}行 {code} {name} 昨日最低价 {y_low:.2f} 突破报警线 {high_val}！")
         if VERBOSE_LOG:
             print("=" * 50)
             print("开始进行价格监控检查...")
